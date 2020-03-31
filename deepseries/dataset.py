@@ -45,30 +45,38 @@ if __name__ == "__main__":
     from fastai.basic_train import BasicLearner
     from torch.nn import MSELoss
     from deepseries.models import WaveNet
-    values = np.sin(np.arange(1, 300)).reshape(1, -1).astype("float32")
-    values = values / values.std()
-    std = values.std()
-    dset = SingleSeriesData(values, 200, 40)
+    values = (np.sin(np.arange(1, 200)) + np.log1p(np.arange(1, 200))).reshape(1, -1).astype("float32")
+    mu, std = values.mean(), values.std()
+    values = (values - mu) / std
+
+    dset = SingleSeriesData(values, 100, 50)
     dl = DataLoader(dset, collate_fn=collate)
 
-    values = np.sin(np.arange(1000, 1300)).reshape(1, -1).astype("float32")
-    values = values / values.std()
-    std = values.std()
-    dset = SingleSeriesData(values, 200, 40)
-    dl2 = DataLoader(dset, collate_fn=collate)
-
-    db = DataBunch(dl, dl2)
+    db = DataBunch(dl, dl)
     net = WaveNet(
                 residual_channels=4,
                  skip_channels=4,
                  dilations=[2 ** i for i in range(8)] * 2,
                  kernels_size=[2 for i in range(8)] * 2)
-    net.cuda()
+    # net.cuda()
     learner = Learner(db, net, loss_func=MSELoss())
     learner.fit(5)
 
     import matplotlib.pyplot as plt
-    test_values = np.sin(np.arange(400, 600)).reshape(1, -1).astype("float32") / std
+    test_values = (np.sin(np.arange(100, 200)) + np.log1p(np.arange(100, 200))).reshape(1, -1).astype("float32")
+    test_values = (test_values - mu) / std
     test_values_tensor = torch.as_tensor(np.expand_dims(test_values, 1)).cuda()
-    plt.plot(net.predict(test_values_tensor, 300).detach().cpu().numpy().reshape(-1))
-    plt.plot((np.sin(np.arange(600, 900)).reshape(1, -1).astype("float32") / std).reshape(-1))
+    plt.plot(net.predict(test_values_tensor, 50).detach().cpu().numpy().reshape(-1), label="pred")
+    y = (((np.sin(np.arange(200, 250)) + np.log1p(np.arange(200, 250))).reshape(1, -1).astype("float32") - mu) / std).reshape(-1)
+    plt.plot(y)
+    plt.legend()
+
+    import matplotlib.pyplot as plt
+    offset = -50
+    test_values = (np.sin(np.arange(100+offset, 200+offset)) + np.log1p(np.arange(100+offset, 200+offset))).reshape(1, -1).astype("float32")
+    test_values = (test_values - mu) / std
+    test_values_tensor = torch.as_tensor(np.expand_dims(test_values, 1)).cuda()
+    plt.plot(net.predict(test_values_tensor, 50).detach().cpu().numpy().reshape(-1), label="pred")
+    y = (((np.sin(np.arange(200+offset, 250+offset)) + np.log1p(np.arange(200+offset, 250+offset))).reshape(1, -1).astype("float32") - mu) / std).reshape(-1)
+    plt.plot(y)
+    plt.legend()

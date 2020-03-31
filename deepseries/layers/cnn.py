@@ -58,12 +58,13 @@ class CausalConv1d(nn.Conv1d):
             groups=groups,
             bias=bias,
             padding_mode=padding_mode)
+        self.bn = nn.BatchNorm1d(out_channels)
 
     def forward(self, inputs):
         result = super(CausalConv1d, self).forward(inputs)
         if self.padding != 0:
             return result[:, :, :-self.shift]
-        return result
+        return self.bn(result)
 
 
 class WaveBlockV1(nn.Module):
