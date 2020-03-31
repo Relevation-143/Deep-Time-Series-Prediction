@@ -72,7 +72,7 @@ if __name__ == "__main__":
     plt.legend()
 
     import matplotlib.pyplot as plt
-    offset = -50
+    offset = 100
     test_values = (np.sin(np.arange(100+offset, 200+offset)) + np.log1p(np.arange(100+offset, 200+offset))).reshape(1, -1).astype("float32")
     test_values = (test_values - mu) / std
     test_values_tensor = torch.as_tensor(np.expand_dims(test_values, 1)).cuda()
