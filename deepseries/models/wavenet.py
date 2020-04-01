@@ -128,6 +128,8 @@ class WaveNet(nn.Module):
 
     def predict(self, enc_x, dec_len, enc_numerical=None, enc_categorical=None,
                 dec_numerical=None, dec_categorical=None):
+        if not isinstance(dec_len, int):
+            dec_len = dec_len[0]
         results = []
         queues = self.encode(enc_x, enc_numerical, enc_categorical)
         step_x = enc_x[:, :, -1].unsqueeze(2)

@@ -78,7 +78,6 @@ class Seq2Seq(torch.nn.Module, BaseModel):
         if self.trans is not None:
             trans_x = self.trans(continuous_x, category_x)
             enc_inputs = torch.cat([inputs, trans_x[:, :enc_lens, :]], dim=2)
-            # dec_input_i = enc_inputs[:, -1, :].unsqueeze(1)
             dec_input_i = torch.cat([inputs[:, -1].unsqueeze(1), trans_x[:, enc_lens].unsqueeze(1)], dim=2)
         else:
             enc_inputs = inputs

@@ -4,15 +4,18 @@
 @Contact: evilpsycho42@gmail.com
 @Time: 2020/3/31 下午10:14
 """
+import random
 import torch
 from torch.utils.data import Dataset, DataLoader
-from fastai.train import DataBunch
+from torch.utils.data import ConcatDataset
+from fastai.train import DataBunch, Learner
+import numpy as np
 
 
 DEC_LEN = "dec_len"
 
 
-def collate(batch):
+def dict_collate(batch):
     r"""Puts each data field into a tensor with outer dimension batch size"""
     x = batch[0][0]
     y = batch[0][1]
@@ -22,61 +25,107 @@ def collate(batch):
     return xx, yy
 
 
-class SingleSeriesData(Dataset):
+class SeriesData(Dataset):
+    """Single Series DataSet"""
+    def __init__(self, x, enc_len, dec_len, mode="train", numerical=None, categorical=None, random_select_start=True):
+        """
 
-    def __init__(self, values, encode_len, decode_len,):
-        self.values = values
-        self.encode_len = encode_len
-        self.decode_len = decode_len
-        self.source_len = values.shape[1]
+        Args:
+            x: array like, shape(S, N)
+            enc_len:
+            dec_len:
+            mode:
+            numerical:
+            categorical:
+            random_select_start:
+        """
+        self.x = x.transpose(1, 0)
+        self.seq_len = self.x.shape[1]
+        self.enc_len = enc_len
+        self.dec_len = dec_len
+        assert mode in ["train", "eval"]
+        self.mode = mode if mode else "train"
+        self.numerical = numerical
+        self.categorical = categorical
+        self.random_select_start = random_select_start
+        self.free_space = np.arange(self.seq_len - self.enc_len - self.dec_len + 1)
 
     def __len__(self):
-        return self.source_len - self.encode_len - self.decode_len + 1
+        if self.random_select_start and self.mode == "train": return 1
+        else: return self.seq_len - self.enc_len - self.dec_len + 1
 
     def __getitem__(self, item):
-        return dict(enc_x=self.values[:, item: item+self.encode_len],
-                    dec_len=self.decode_len), \
-               self.values[:, item+self.encode_len: item+self.encode_len+self.decode_len]
+        if self.random_select_start and self.mode == "train":
+            item = item + random.choice(self.free_space)
+        enc_start = item
+        enc_end = item + self.enc_len
+        dec_start = enc_end
+        dec_end = dec_start + self.dec_len
+
+        feed = {
+            "enc_x": self.x[:, enc_start: enc_end],
+            "dec_len": self.dec_len,
+        }
+
+        if self.numerical:
+            feed["enc_numerical"] = self.numerical[:, enc_start: enc_end]
+            feed["dec_numerical"] = self.numerical[:, dec_start: dec_end]
+        if self. categorical:
+            feed["enc_categorical"] = self.categorical[:, enc_start: enc_end]
+            feed["dec_categorical"] = self.categorical[:, dec_start: dec_end]
+
+        return feed, self.x[:, dec_start: dec_end]
+
+    def train(self):
+        self.mode = "train"
+        return self
+
+    def eval(self):
+        self.mode = "eval"
+        return self
+
+    def open_random(self):
+        self.random_select_start = True
+
+    def close_random(self):
+        self.random_select_start = False
 
 
-if __name__ == "__main__":
-    import numpy as np
-    from fastai.train import DataBunch, Learner
-    from fastai.basic_train import BasicLearner
-    from torch.nn import MSELoss
-    from deepseries.models import WaveNet
-    values = (np.sin(np.arange(1, 200)) + np.log1p(np.arange(1, 200))).reshape(1, -1).astype("float32")
-    mu, std = values.mean(), values.std()
-    values = (values - mu) / std
+class ConcatDataSetEx(ConcatDataset):
 
-    dset = SingleSeriesData(values, 100, 50)
-    dl = DataLoader(dset, collate_fn=collate)
+    def train(self):
+        for d in self.datasets:
+            d.train()
+        self.cumulative_sizes = self.cumsum(self.datasets)
 
-    db = DataBunch(dl, dl)
-    net = WaveNet(
-                residual_channels=4,
-                 skip_channels=4,
-                 dilations=[2 ** i for i in range(8)] * 2,
-                 kernels_size=[2 for i in range(8)] * 2)
-    # net.cuda()
-    learner = Learner(db, net, loss_func=MSELoss())
-    learner.fit(5)
+    def eval(self):
+        for d in self.datasets:
+            d.eval()
+        self.cumulative_sizes = self.cumsum(self.datasets)
 
-    import matplotlib.pyplot as plt
-    test_values = (np.sin(np.arange(100, 200)) + np.log1p(np.arange(100, 200))).reshape(1, -1).astype("float32")
-    test_values = (test_values - mu) / std
-    test_values_tensor = torch.as_tensor(np.expand_dims(test_values, 1)).cuda()
-    plt.plot(net.predict(test_values_tensor, 50).detach().cpu().numpy().reshape(-1), label="pred")
-    y = (((np.sin(np.arange(200, 250)) + np.log1p(np.arange(200, 250))).reshape(1, -1).astype("float32") - mu) / std).reshape(-1)
-    plt.plot(y)
-    plt.legend()
+    def open_random(self):
+        for d in self.datasets:
+            d.open_random()
+        self.cumulative_sizes = self.cumsum(self.datasets)
 
-    import matplotlib.pyplot as plt
-    offset = 100
-    test_values = (np.sin(np.arange(100+offset, 200+offset)) + np.log1p(np.arange(100+offset, 200+offset))).reshape(1, -1).astype("float32")
-    test_values = (test_values - mu) / std
-    test_values_tensor = torch.as_tensor(np.expand_dims(test_values, 1)).cuda()
-    plt.plot(net.predict(test_values_tensor, 50).detach().cpu().numpy().reshape(-1), label="pred")
-    y = (((np.sin(np.arange(200+offset, 250+offset)) + np.log1p(np.arange(200+offset, 250+offset))).reshape(1, -1).astype("float32") - mu) / std).reshape(-1)
-    plt.plot(y)
-    plt.legend()
+    def close_random(self):
+        for d in self.datasets:
+            d.close_random()
+        self.cumulative_sizes = self.cumsum(self.datasets)
+
+
+class MultiSeriesData:
+
+    def __new__(cls, x, enc_len, dec_len, series_id, mode="train",
+                numerical=None, categorical=None, random_select_start=True):
+        sid = np.unique(series_id)
+        all_sets = []
+        for i in sid:
+            mask = series_id == i
+            all_sets.append(
+                SeriesData(x[mask], enc_len, dec_len, mode,
+                           numerical=None if numerical is None else numerical[mask],
+                           categorical=None if categorical is None else categorical[mask],
+                           random_select_start=random_select_start
+                           ))
+        return ConcatDataSetEx(all_sets)
