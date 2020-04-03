@@ -138,6 +138,3 @@ class BaseTorchModel:
             datefmt='%m/%d/%Y %I:%M:%S %p'
         )
         logging.getLogger().addHandler(logging.StreamHandler())
-
-
-# 模型，超参数，训练记录，

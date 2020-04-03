@@ -1,0 +1,150 @@
+[[04/03/2020 03:45:36 PM]] epoch[   0 / 10, 25.0%], train loss 0.4001
+[[04/03/2020 03:45:40 PM]] epoch[   0 / 10, 58.3%], train loss 0.7990
+[[04/03/2020 03:45:43 PM]] epoch[   0 / 10, 91.7%], train loss 0.4314
+[[04/03/2020 03:45:44 PM]] epoch[   0 / 10] valid loss 0.0242
+[[04/03/2020 03:45:44 PM]] epoch[   0 / 10] valid loss 0.0454
+[[04/03/2020 03:45:45 PM]] epoch[   0 / 10] valid loss 0.0722
+[[04/03/2020 03:45:45 PM]] epoch[   0 / 10] valid loss 0.0895
+[[04/03/2020 03:45:46 PM]] epoch[   0 / 10] valid loss 0.1117
+[[04/03/2020 03:45:47 PM]] epoch[   0 / 10] valid loss 0.1357
+[[04/03/2020 03:45:47 PM]] epoch[   0 / 10] valid loss 0.1595
+[[04/03/2020 03:45:48 PM]] epoch[   0 / 10] valid loss 0.1720
+[[04/03/2020 03:45:48 PM]] epoch[   0 / 10] valid loss 0.1891
+[[04/03/2020 03:45:49 PM]] epoch[   0 / 10] valid loss 0.2137
+[[04/03/2020 03:45:49 PM]] epoch[   0 / 10] valid loss 0.2253
+[[04/03/2020 03:45:50 PM]] epoch[   0 / 10] valid loss 0.2391
+[[04/03/2020 03:45:53 PM]] epoch[   1 / 10, 25.0%], train loss 0.2690
+[[04/03/2020 03:45:57 PM]] epoch[   1 / 10, 58.3%], train loss 0.2081
+[[04/03/2020 03:46:01 PM]] epoch[   1 / 10, 91.7%], train loss 0.2303
+[[04/03/2020 03:46:02 PM]] epoch[   1 / 10] valid loss 0.0238
+[[04/03/2020 03:46:02 PM]] epoch[   1 / 10] valid loss 0.0336
+[[04/03/2020 03:46:03 PM]] epoch[   1 / 10] valid loss 0.0583
+[[04/03/2020 03:46:04 PM]] epoch[   1 / 10] valid loss 0.0639
+[[04/03/2020 03:46:04 PM]] epoch[   1 / 10] valid loss 0.0839
+[[04/03/2020 03:46:05 PM]] epoch[   1 / 10] valid loss 0.0955
+[[04/03/2020 03:46:05 PM]] epoch[   1 / 10] valid loss 0.1169
+[[04/03/2020 03:46:06 PM]] epoch[   1 / 10] valid loss 0.1351
+[[04/03/2020 03:46:06 PM]] epoch[   1 / 10] valid loss 0.1501
+[[04/03/2020 03:46:07 PM]] epoch[   1 / 10] valid loss 0.1774
+[[04/03/2020 03:46:08 PM]] epoch[   1 / 10] valid loss 0.2046
+[[04/03/2020 03:46:08 PM]] epoch[   1 / 10] valid loss 0.2343
+[[04/03/2020 03:46:12 PM]] epoch[   2 / 10, 25.0%], train loss 0.1241
+[[04/03/2020 03:46:16 PM]] epoch[   2 / 10, 58.3%], train loss 0.2480
+[[04/03/2020 03:46:20 PM]] epoch[   2 / 10, 91.7%], train loss 0.1816
+[[04/03/2020 03:46:21 PM]] epoch[   2 / 10] valid loss 0.0124
+[[04/03/2020 03:46:21 PM]] epoch[   2 / 10] valid loss 0.0238
+[[04/03/2020 03:46:22 PM]] epoch[   2 / 10] valid loss 0.0349
+[[04/03/2020 03:46:22 PM]] epoch[   2 / 10] valid loss 0.0652
+[[04/03/2020 03:46:23 PM]] epoch[   2 / 10] valid loss 0.0754
+[[04/03/2020 03:46:24 PM]] epoch[   2 / 10] valid loss 0.0901
+[[04/03/2020 03:46:24 PM]] epoch[   2 / 10] valid loss 0.1044
+[[04/03/2020 03:46:25 PM]] epoch[   2 / 10] valid loss 0.1333
+[[04/03/2020 03:46:25 PM]] epoch[   2 / 10] valid loss 0.1527
+[[04/03/2020 03:46:26 PM]] epoch[   2 / 10] valid loss 0.1613
+[[04/03/2020 03:46:27 PM]] epoch[   2 / 10] valid loss 0.2048
+[[04/03/2020 03:46:27 PM]] epoch[   2 / 10] valid loss 0.2168
+[[04/03/2020 03:46:31 PM]] epoch[   3 / 10, 25.0%], train loss 0.1023
+[[04/03/2020 03:46:35 PM]] epoch[   3 / 10, 58.3%], train loss 0.2296
+[[04/03/2020 03:46:39 PM]] epoch[   3 / 10, 91.7%], train loss 0.2867
+[[04/03/2020 03:46:40 PM]] epoch[   3 / 10] valid loss 0.0275
+[[04/03/2020 03:46:40 PM]] epoch[   3 / 10] valid loss 0.0351
+[[04/03/2020 03:46:41 PM]] epoch[   3 / 10] valid loss 0.0560
+[[04/03/2020 03:46:42 PM]] epoch[   3 / 10] valid loss 0.0756
+[[04/03/2020 03:46:42 PM]] epoch[   3 / 10] valid loss 0.0868
+[[04/03/2020 03:46:43 PM]] epoch[   3 / 10] valid loss 0.1080
+[[04/03/2020 03:46:43 PM]] epoch[   3 / 10] valid loss 0.1292
+[[04/03/2020 03:46:44 PM]] epoch[   3 / 10] valid loss 0.1360
+[[04/03/2020 03:46:45 PM]] epoch[   3 / 10] valid loss 0.1491
+[[04/03/2020 03:46:45 PM]] epoch[   3 / 10] valid loss 0.1620
+[[04/03/2020 03:46:46 PM]] epoch[   3 / 10] valid loss 0.1758
+[[04/03/2020 03:46:46 PM]] epoch[   3 / 10] valid loss 0.1989
+[[04/03/2020 03:46:51 PM]] epoch[   4 / 10, 25.0%], train loss 0.2648
+[[04/03/2020 03:46:55 PM]] epoch[   4 / 10, 58.3%], train loss 0.3360
+[[04/03/2020 03:46:58 PM]] epoch[   4 / 10, 91.7%], train loss 0.1638
+[[04/03/2020 03:46:59 PM]] epoch[   4 / 10] valid loss 0.0159
+[[04/03/2020 03:46:59 PM]] epoch[   4 / 10] valid loss 0.0407
+[[04/03/2020 03:47:00 PM]] epoch[   4 / 10] valid loss 0.0513
+[[04/03/2020 03:47:01 PM]] epoch[   4 / 10] valid loss 0.0681
+[[04/03/2020 03:47:01 PM]] epoch[   4 / 10] valid loss 0.0808
+[[04/03/2020 03:47:02 PM]] epoch[   4 / 10] valid loss 0.1012
+[[04/03/2020 03:47:02 PM]] epoch[   4 / 10] valid loss 0.1147
+[[04/03/2020 03:47:03 PM]] epoch[   4 / 10] valid loss 0.1296
+[[04/03/2020 03:47:04 PM]] epoch[   4 / 10] valid loss 0.1494
+[[04/03/2020 03:47:04 PM]] epoch[   4 / 10] valid loss 0.1648
+[[04/03/2020 03:47:05 PM]] epoch[   4 / 10] valid loss 0.1804
+[[04/03/2020 03:47:05 PM]] epoch[   4 / 10] valid loss 0.2087
+[[04/03/2020 03:47:09 PM]] epoch[   5 / 10, 25.0%], train loss 0.1397
+[[04/03/2020 03:47:13 PM]] epoch[   5 / 10, 58.3%], train loss 0.1432
+[[04/03/2020 03:47:17 PM]] epoch[   5 / 10, 91.7%], train loss 0.2645
+[[04/03/2020 03:47:18 PM]] epoch[   5 / 10] valid loss 0.0133
+[[04/03/2020 03:47:18 PM]] epoch[   5 / 10] valid loss 0.0434
+[[04/03/2020 03:47:19 PM]] epoch[   5 / 10] valid loss 0.0682
+[[04/03/2020 03:47:19 PM]] epoch[   5 / 10] valid loss 0.0771
+[[04/03/2020 03:47:20 PM]] epoch[   5 / 10] valid loss 0.1039
+[[04/03/2020 03:47:21 PM]] epoch[   5 / 10] valid loss 0.1134
+[[04/03/2020 03:47:21 PM]] epoch[   5 / 10] valid loss 0.1355
+[[04/03/2020 03:47:22 PM]] epoch[   5 / 10] valid loss 0.1460
+[[04/03/2020 03:47:22 PM]] epoch[   5 / 10] valid loss 0.1580
+[[04/03/2020 03:47:23 PM]] epoch[   5 / 10] valid loss 0.1756
+[[04/03/2020 03:47:23 PM]] epoch[   5 / 10] valid loss 0.1946
+[[04/03/2020 03:47:24 PM]] epoch[   5 / 10] valid loss 0.2209
+[[04/03/2020 03:47:28 PM]] epoch[   6 / 10, 25.0%], train loss 0.2831
+[[04/03/2020 03:47:32 PM]] epoch[   6 / 10, 58.3%], train loss 0.1842
+[[04/03/2020 03:47:35 PM]] epoch[   6 / 10, 91.7%], train loss 0.1054
+[[04/03/2020 03:47:36 PM]] epoch[   6 / 10] valid loss 0.0163
+[[04/03/2020 03:47:36 PM]] epoch[   6 / 10] valid loss 0.0236
+[[04/03/2020 03:47:37 PM]] epoch[   6 / 10] valid loss 0.0347
+[[04/03/2020 03:47:37 PM]] epoch[   6 / 10] valid loss 0.0568
+[[04/03/2020 03:47:38 PM]] epoch[   6 / 10] valid loss 0.0711
+[[04/03/2020 03:47:39 PM]] epoch[   6 / 10] valid loss 0.0861
+[[04/03/2020 03:47:39 PM]] epoch[   6 / 10] valid loss 0.1004
+[[04/03/2020 03:47:40 PM]] epoch[   6 / 10] valid loss 0.1239
+[[04/03/2020 03:47:40 PM]] epoch[   6 / 10] valid loss 0.1435
+[[04/03/2020 03:47:41 PM]] epoch[   6 / 10] valid loss 0.1726
+[[04/03/2020 03:47:42 PM]] epoch[   6 / 10] valid loss 0.1773
+[[04/03/2020 03:47:42 PM]] epoch[   6 / 10] valid loss 0.1908
+[[04/03/2020 03:47:46 PM]] epoch[   7 / 10, 25.0%], train loss 0.0759
+[[04/03/2020 03:47:50 PM]] epoch[   7 / 10, 58.3%], train loss 0.1046
+[[04/03/2020 03:47:53 PM]] epoch[   7 / 10, 91.7%], train loss 0.1583
+[[04/03/2020 03:47:54 PM]] epoch[   7 / 10] valid loss 0.0063
+[[04/03/2020 03:47:55 PM]] epoch[   7 / 10] valid loss 0.0150
+[[04/03/2020 03:47:55 PM]] epoch[   7 / 10] valid loss 0.0285
+[[04/03/2020 03:47:56 PM]] epoch[   7 / 10] valid loss 0.0397
+[[04/03/2020 03:47:57 PM]] epoch[   7 / 10] valid loss 0.0531
+[[04/03/2020 03:47:57 PM]] epoch[   7 / 10] valid loss 0.0714
+[[04/03/2020 03:47:58 PM]] epoch[   7 / 10] valid loss 0.0908
+[[04/03/2020 03:47:58 PM]] epoch[   7 / 10] valid loss 0.1094
+[[04/03/2020 03:47:59 PM]] epoch[   7 / 10] valid loss 0.1364
+[[04/03/2020 03:48:00 PM]] epoch[   7 / 10] valid loss 0.1646
+[[04/03/2020 03:48:00 PM]] epoch[   7 / 10] valid loss 0.1819
+[[04/03/2020 03:48:01 PM]] epoch[   7 / 10] valid loss 0.1891
+[[04/03/2020 03:48:05 PM]] epoch[   8 / 10, 25.0%], train loss 0.2813
+[[04/03/2020 03:48:08 PM]] epoch[   8 / 10, 58.3%], train loss 0.1324
+[[04/03/2020 03:48:12 PM]] epoch[   8 / 10, 91.7%], train loss 0.1199
+[[04/03/2020 03:48:13 PM]] epoch[   8 / 10] valid loss 0.0189
+[[04/03/2020 03:48:14 PM]] epoch[   8 / 10] valid loss 0.0393
+[[04/03/2020 03:48:14 PM]] epoch[   8 / 10] valid loss 0.0499
+[[04/03/2020 03:48:15 PM]] epoch[   8 / 10] valid loss 0.0643
+[[04/03/2020 03:48:15 PM]] epoch[   8 / 10] valid loss 0.1025
+[[04/03/2020 03:48:16 PM]] epoch[   8 / 10] valid loss 0.1150
+[[04/03/2020 03:48:17 PM]] epoch[   8 / 10] valid loss 0.1317
+[[04/03/2020 03:48:17 PM]] epoch[   8 / 10] valid loss 0.1433
+[[04/03/2020 03:48:18 PM]] epoch[   8 / 10] valid loss 0.1836
+[[04/03/2020 03:48:19 PM]] epoch[   8 / 10] valid loss 0.1961
+[[04/03/2020 03:48:19 PM]] epoch[   8 / 10] valid loss 0.2141
+[[04/03/2020 03:48:20 PM]] epoch[   8 / 10] valid loss 0.2324
+[[04/03/2020 03:48:24 PM]] epoch[   9 / 10, 25.0%], train loss 0.2822
+[[04/03/2020 03:48:29 PM]] epoch[   9 / 10, 58.3%], train loss 0.2442
+[[04/03/2020 03:48:33 PM]] epoch[   9 / 10, 91.7%], train loss 0.2093
+[[04/03/2020 03:48:34 PM]] epoch[   9 / 10] valid loss 0.0217
+[[04/03/2020 03:48:34 PM]] epoch[   9 / 10] valid loss 0.0327
+[[04/03/2020 03:48:35 PM]] epoch[   9 / 10] valid loss 0.0564
+[[04/03/2020 03:48:36 PM]] epoch[   9 / 10] valid loss 0.0830
+[[04/03/2020 03:48:36 PM]] epoch[   9 / 10] valid loss 0.1221
+[[04/03/2020 03:48:37 PM]] epoch[   9 / 10] valid loss 0.1567
+[[04/03/2020 03:48:37 PM]] epoch[   9 / 10] valid loss 0.2128
+[[04/03/2020 03:48:38 PM]] epoch[   9 / 10] valid loss 0.2382
+[[04/03/2020 03:48:39 PM]] epoch[   9 / 10] valid loss 0.2604
+[[04/03/2020 03:48:39 PM]] epoch[   9 / 10] valid loss 0.2690
+[[04/03/2020 03:48:40 PM]] epoch[   9 / 10] valid loss 0.2766
+[[04/03/2020 03:48:41 PM]] epoch[   9 / 10] valid loss 0.3372

@@ -112,9 +112,9 @@ class WaveNet(nn.Module):
         super().__init__()
 
         self.enc_trans = SeriesFeatureTransformer(enc_compress, enc_numerical, enc_categorical)
-        self.enc = WaveEncoder(enc_compress, source_dim, residual_channels, skip_channels, dilations, kernels_size)
+        self.enc = WaveEncoder(self.enc_trans.output_dim, source_dim, residual_channels, skip_channels, dilations, kernels_size)
         self.dec_trans = SeriesFeatureTransformer(dec_compress, dec_numerical, dec_categorical)
-        self.dec = WaveDecoder(dec_compress, source_dim, residual_channels, skip_channels, dilations, kernels_size)
+        self.dec = WaveDecoder(self.enc_trans.output_dim, source_dim, residual_channels, skip_channels, dilations, kernels_size)
 
     def encode(self, x, numerical=None, categorical=None):
         enc_features = self.enc_trans(numerical, categorical)
@@ -138,7 +138,8 @@ class WaveNet(nn.Module):
             step_categorical = dec_categorical[:, :, -1].unsqueeze(2) if dec_categorical is not None else None
             step_x, queues = self.decode(step_x, queues, step_numerical, step_categorical)
             results.append(step_x)
-        return torch.cat(results, dim=2)  # (B, S)
+        y_hat = torch.cat(results, dim=2).squeeze()
+        return y_hat  # (B, S)
 
     def forward(self, feed):
         y_hat = self.predict(**feed)
@@ -165,22 +166,23 @@ class SeriesFeatureTransformer(nn.Module):
         self.embed_cat = nn.ModuleList([nn.Embedding(i, o) for i, o in categorical]) if categorical else None
         self.compress = TimeDistributedDense1D(
             self.categorical_dim + self.numerical_dim, compress_dim, activation=F.relu) if compress_dim else None
+        self.output_dim = compress_dim if self.compress_dim else self.numerical_dim + self.categorical_dim
 
     def forward(self, numerical=None, categorical=None):
-        if self.compress:
-            concat = []
-            if self.numerical:
-                concat.append(numerical)
-            if self.categorical:
-                cat = []
-                for channel in range(categorical.shape[1]):
-                    cat.append(self.embed_cat[channel](categorical[:, channel]).transpose(1, 2))
-                concat.append(torch.cat(cat, dim=1))
-            concat = torch.cat(concat, dim=1)
-            compress = self.compress(concat)
-            return compress
-        else:
+        if self.numerical is None and self.categorical is None:
             return None
+        concat = []
+        if self.numerical:
+            concat.append(numerical)
+        if self.categorical:
+            cat = []
+            for channel in range(categorical.shape[1]):
+                cat.append(self.embed_cat[channel](categorical[:, channel]).transpose(1, 2))
+            concat.append(torch.cat(cat, dim=1))
+        concat = torch.cat(concat, dim=1)
+        if self.compress:
+            concat = self.compress(concat)
+        return concat
 
 
 if __name__ == "__main__":
@@ -198,5 +200,4 @@ if __name__ == "__main__":
     f3 = torch.randint(0, 10, (4, 3, 10))
     net3 = WaveNet(enc_compress=2, enc_categorical=[(10, 2), (10, 2), (10, 2)])
     net3.predict(x3, 10, enc_categorical=f3).shape
-
     from fastai.basic_train import BasicLearner, Learner, DataBunch
