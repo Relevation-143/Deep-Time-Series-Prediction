@@ -47,20 +47,22 @@ class Learner:
             bad_epochs = 0
             global_steps = 0
             for epoch in range(max_epochs):
+                train_loss = 0
                 for i, (x, y) in enumerate(train_dl):
                     loss = self.loss_batch(x, y)
                     writer.add_scalar("Loss/train", loss, epoch)
                     global_steps += 1
+                    train_loss += loss
                     if global_steps % self.log_interval == 0:
-                        logging.info(f"epoch[{epoch: {len(str(max_epochs))}d}/{max_epochs} {i/len(train_dl)*100:.1f}%], "
-                                     f"train loss {loss:.4f}")
+                        logging.info(f"epoch: {epoch} / {max_epochs}, batch: {i/len(train_dl)*100:.0f}%, "
+                                     f"train loss {train_loss / i:.4f}")
 
                 valid_loss = 0
                 for x, y in valid_dl:
                     loss = self.eval_batch(x, y)
                     writer.add_scalar("Loss/valid", loss, epoch)
                     valid_loss += loss / len(valid_dl)
-                logging.info(f"epoch[{epoch: {len(str(max_epochs))}d}/{max_epochs}] valid loss {valid_loss:.4f}")
+                logging.info(f"epoch: {epoch} / {max_epochs} finished, valid loss {valid_loss:.4f}")
 
                 self.losses.append(valid_loss)
                 self.epochs += 1
