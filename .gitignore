@@ -6,3 +6,5 @@ build
 dist
 dtsp.egg-info
 data
+logs
+checkpoints

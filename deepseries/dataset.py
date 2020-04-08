@@ -9,93 +9,51 @@ import random
 import numpy as np
 
 
-VALID_FTYPE = ['num', 'cat']
-
-
 class _BaseFeature:
 
-    def read_batch(self, *args, **kwargs):
+    def __init__(self, values, idx_map=None):
+        """
+
+        Args:
+            values (2D/3D-ndarray): shape(num_series, num_dim, sequence_lens) / shape(num_series, num_dim)
+            idx_map (dict): shape(num_series_id, num_values_id)
+        """
+        self.values = values
+        self.idx_map = idx_map
+
+    def _read_batch(self, series_idx, times_idx):
         raise NotImplemented
+
+    def __call__(self, series_idx, times_idx):
+        """
+
+        Args:
+            series_idx (1D-ndarray): shape(series_idx)
+            times_idx (2D-ndarray): shape(N, times_idx)
+
+        Returns:
+            shape(B, D, S)
+        """
+        if self.idx_map is not None:
+            series_idx = np.array([self.idx_map[i] for i in series_idx])
+        return self._read_batch(series_idx, times_idx)
 
 
 class SeriesFeature(_BaseFeature):
 
-    def __init__(self, name, ftype, series, idx_map=None, embedding=None, enc=True, dec=True):
-        """
-
-        Args:
-            name (string): feature name
-            ftype (string): 'num' or 'cat'
-            series (np.array): shape(N, seq)
-            idx_map (dict): series_idx to custom_feature_idx
-            embedding (tuple or list): (feature_num_unique, embedding_size)
-            enc (bool): use for encoder
-            dec (bool): use for decoder
-        """
-        self.name = name
-        self.ftype = ftype
-        assert self.ftype in VALID_FTYPE
-        if ftype == "cat":
-            assert embedding is not None
-        self.embedding = embedding
-        self.series = series
-        self.idx_map = idx_map
-        self.enc = enc
-        self.dec = dec
-
-    def read_batch(self, series_idx, time_idx):
-        """
-
-        Args:
-            series_idx (int, 1D np.array):
-            time_idx (1D or 2D np.array):
-
-        Returns:
-
-        """
-
-        if isinstance(series_idx, int):
-            series_idx = [series_idx]
-
-        if len(series_idx) == 1:
-            # single series
-            batch = self.series[series_idx, :][:, time_idx].squeeze(0)
-        else:
-            # multi series_idx single time_idx
-            if self.idx_map is not None:
-                series_idx = np.array([self.idx_map[i] for i in series_idx])
-            batch = self.series[series_idx, :][:, time_idx]
+    def _read_batch(self, series_idx, time_idx):
+        batch_size = series_idx.shape[0] * time_idx.shape[0]
+        seq_len = time_idx.shape[1]
+        batch = self.values[series_idx, :][:, :, time_idx]\
+            .transpose(0, 2, 1, 3)\
+            .reshape(batch_size, self.values.shape[1], seq_len)
         return batch
-
+# dgagasdgfasf
 
 class PropertyFeature(_BaseFeature):
 
-    def __init__(self, name, ftype, value_map, embedding=None, enc=True, dec=True):
-        """
-
-        Args:
-            name (string): feature name
-            ftype (string): 'num' or 'cat'
-            value_map (dict): series_idx to property mapping
-            embedding (tuple or list): (feature_num_unique, embedding_size)
-            enc (bool): use for encoder
-            dec (bool): use for decoder
-        """
-        self.name = name
-        self.ftype = ftype
-        assert self.ftype in VALID_FTYPE
-        if ftype == "cat":
-            assert embedding is not None
-        self.embedding = embedding
-        self.value_map = value_map
-        self.enc = enc
-        self.dec = dec
-
-    def read_batch(self, series_idx, time_idx):
-        if isinstance(series_idx, int):
-            series_idx = [series_idx]
-
-        var = np.array([self.value_map[k] for k in series_idx])
+    def _read_batch(self, series_idx, time_idx):
+        var = self.values[series_idx]
         if len(time_idx.shape) == 1:
             # single time
             time_len = len(time_idx)

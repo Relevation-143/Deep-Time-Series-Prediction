@@ -138,8 +138,8 @@ class WaveNet(nn.Module):
             step_categorical = dec_categorical[:, :, -1].unsqueeze(2) if dec_categorical is not None else None
             step_x, queues = self.decode(step_x, queues, step_numerical, step_categorical)
             results.append(step_x)
-        y_hat = torch.cat(results, dim=2).squeeze()
-        return y_hat  # (B, S)
+        y_hat = torch.cat(results, dim=2)
+        return y_hat  # (B, N, S)
 
     def forward(self, feed):
         y_hat = self.predict(**feed)

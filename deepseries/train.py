@@ -41,28 +41,32 @@ class Learner:
         )
         logging.getLogger().addHandler(logging.StreamHandler())
 
-    def fit(self, max_epochs, train_dl, valid_dl, early_stopping=True, patient=10):
+    def fit(self, max_epochs, train_dl, valid_dl, early_stopping=True, patient=10, save_start_epoch=-1):
         with SummaryWriter(self.log_dir) as writer:
             # writer.add_graph(self.model)
             bad_epochs = 0
             global_steps = 0
             for epoch in range(max_epochs):
+                self.model.train()
                 train_loss = 0
                 for i, (x, y) in enumerate(train_dl):
                     loss = self.loss_batch(x, y)
-                    writer.add_scalar("Loss/train", loss, epoch)
+                    writer.add_scalar("Loss/train", loss, global_steps)
                     global_steps += 1
                     train_loss += loss
                     if global_steps % self.log_interval == 0:
                         logging.info(f"epoch: {epoch} / {max_epochs}, batch: {i/len(train_dl)*100:.0f}%, "
-                                     f"train loss {train_loss / i:.4f}")
-
+                                     f"train loss {train_loss / (i+1):.4f}")
                 valid_loss = 0
+                self.model.eval()
                 for x, y in valid_dl:
                     loss = self.eval_batch(x, y)
-                    writer.add_scalar("Loss/valid", loss, epoch)
                     valid_loss += loss / len(valid_dl)
+                writer.add_scalar("Loss/valid", valid_loss, global_steps)
                 logging.info(f"epoch: {epoch} / {max_epochs} finished, valid loss {valid_loss:.4f}")
+
+                if epoch >= save_start_epoch:
+                    self.save()
 
                 self.losses.append(valid_loss)
                 self.epochs += 1
@@ -100,7 +104,6 @@ class Learner:
         self.model.load_state_dict(checkpoint['model'])
         self.optimizer.load_state_dict(checkpoint['optimizer'])
         self.epochs = checkpoint['epochs']
-        self.losses = checkpoint['losses']
 
     def predict(self, *args, **kwargs):
         return self.model.predict(*args, **kwargs)
@@ -110,8 +113,7 @@ class Learner:
             "model": self.model.state_dict(),
             "optimizer": self.optimizer.state_dict(),
             "epochs": self.epochs,
-            "losses": self.losses,
         }
 
-        name = f"model-{self.epochs}-{self.losses[-1]:.4f}.pkl"
+        name = f"model-epoch-{self.epochs}.pkl"
         torch.save(checkpoint, os.path.join(self.model_dir, name))
