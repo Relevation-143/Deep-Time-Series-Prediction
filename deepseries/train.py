@@ -9,6 +9,7 @@ import torch
 from torch.utils.tensorboard import SummaryWriter
 from datetime import datetime
 import logging
+import numpy as np
 
 
 class Learner:
@@ -44,9 +45,10 @@ class Learner:
         )
         logging.getLogger().addHandler(logging.StreamHandler())
 
-    def fit(self, max_epochs, train_dl, valid_dl, early_stopping=True, patient=10, save_start_epoch=-1):
+    def fit(self, max_epochs, train_dl, valid_dl, early_stopping=True, patient=10, start_save=-1):
         with SummaryWriter(self.log_dir) as writer:
             # writer.add_graph(self.model)
+            best_score = np.inf
             bad_epochs = 0
             global_steps = 0
             for epoch in range(max_epochs):
@@ -68,19 +70,22 @@ class Learner:
                 writer.add_scalar("Loss/valid", valid_loss, global_steps)
                 logging.info(f"epoch: {epoch} / {max_epochs} finished, valid loss {valid_loss:.4f}")
 
-                if epoch >= save_start_epoch:
-                    self.save()
-
                 self.losses.append(valid_loss)
                 self.epochs += 1
+
+                if epoch >= start_save:
+                    self.save()
                 if early_stopping:
                     if self.epochs > 1:
-                        if valid_loss >= min(self.losses):
+                        if valid_loss > best_score:
                             bad_epochs += 1
                         else:
                             bad_epochs = 0
-                        if bad_epochs > patient:
+                        if bad_epochs >= patient:
+                            print("early stopping!")
                             break
+                best_score = min(self.losses)
+                print(f"training finished, best epoch {np.argmin(self.losses)}, best valid loss {best_score:.4f}")
 
     def loss_batch(self, x, y):
         if isinstance(x, dict):

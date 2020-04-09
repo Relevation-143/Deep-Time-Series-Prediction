@@ -83,7 +83,7 @@ class FeatureStore:
         if len(self.features) == 0:
             return None
         else:
-            batch = np.stack([f.read_batch(series_idx, time_idx) for f in self.features], axis=1)
+            batch = np.concatenate([f.read_batch(series_idx, time_idx) for f in self.features], axis=1)
             return batch
 
 
