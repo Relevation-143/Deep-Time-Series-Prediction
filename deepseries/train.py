@@ -31,6 +31,9 @@ class Learner:
 
     def init_logging(self):
 
+        # exist_logger = logging.Logger.manager.loggerDict()
+        # if 'deepseries' not in exist_logger:
+
         date_str = datetime.now().strftime('%Y-%m-%d_%H-%M')
         log_file = 'log_{}.txt'.format(date_str)
         logging.basicConfig(

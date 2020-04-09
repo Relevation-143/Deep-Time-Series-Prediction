@@ -9,58 +9,69 @@ import random
 import numpy as np
 
 
-class _BaseFeature:
+class TimeSeries:
 
     def __init__(self, values, idx_map=None):
         """
 
         Args:
-            values (2D/3D-ndarray): shape(num_series, num_dim, sequence_lens) / shape(num_series, num_dim)
-            idx_map (dict): shape(num_series_id, num_values_id)
+            values: shape(N, dim, seq)
+            idx_map: dict
         """
+        assert isinstance(values, np.ndarray)
+        assert len(values.shape) == 3
+        self.n = values.shape[0]
+        self.dim = values.shape[1]
         self.values = values
         self.idx_map = idx_map
 
-    def _read_batch(self, series_idx, times_idx):
-        raise NotImplemented
-
-    def __call__(self, series_idx, times_idx):
+    def read_batch(self, series_idx, time_idx):
         """
 
         Args:
-            series_idx (1D-ndarray): shape(series_idx)
-            times_idx (2D-ndarray): shape(N, times_idx)
+            series_idx: shape(I)
+            time_idx: shape(J, seq)
 
         Returns:
-            shape(B, D, S)
+            shape(batch = J / I, dim, seq)
+        """
+        if self.n == 1:
+            assert len(series_idx) == 1
+        if self.idx_map is not None:
+            series_idx = np.array([self.idx_map[i] for i in series_idx])
+        batch_size = series_idx.shape[0] * time_idx.shape[0]
+        seq_len = time_idx.shape[1]
+        batch = self.values[series_idx][:, :, time_idx].transpose(0, 2, 1, 3).reshape(batch_size, self.dim, seq_len)
+        return batch
+
+
+class Property:
+
+    def __init__(self, values, idx_map=None):
+        """
+
+        Args:
+            values (np.ndarray): shape(N, dim)
+            idx_map: dict
+        """
+        assert isinstance(values, dict)
+        self.values = values
+        self.idx_map = idx_map
+
+    def read_batch(self, series_idx, time_idx):
+        """
+
+        Args:
+            series_idx: shape(N)
+            time_idx: (1, seq)
+
+        Returns:
+            shape(N, dim, seq)
         """
         if self.idx_map is not None:
             series_idx = np.array([self.idx_map[i] for i in series_idx])
-        return self._read_batch(series_idx, times_idx)
-
-
-class SeriesFeature(_BaseFeature):
-
-    def _read_batch(self, series_idx, time_idx):
-        batch_size = series_idx.shape[0] * time_idx.shape[0]
-        seq_len = time_idx.shape[1]
-        batch = self.values[series_idx, :][:, :, time_idx]\
-            .transpose(0, 2, 1, 3)\
-            .reshape(batch_size, self.values.shape[1], seq_len)
+        batch = np.repeat(np.expand_dims(self.values[series_idx], axis=2), time_idx.shape[1], axis=2)
         return batch
-# dgagasdgfasf
-
-class PropertyFeature(_BaseFeature):
-
-    def _read_batch(self, series_idx, time_idx):
-        var = self.values[series_idx]
-        if len(time_idx.shape) == 1:
-            # single time
-            time_len = len(time_idx)
-        else:
-            # multi time
-            time_len = time_idx.shape[2]
-        return np.repeat(np.expand_dims(var, axis=1), time_len, axis=1)
 
 
 class FeatureStore:
@@ -75,27 +86,21 @@ class FeatureStore:
             batch = np.stack([f.read_batch(series_idx, time_idx) for f in self.features], axis=1)
             return batch
 
-    def __str__(self):
-        return f"{self.__class__.__name__}: {','.join([f.name for f in self.features])}"
-
-    def __repr__(self):
-        return self.__str__()
-
 
 class SeriesFrame:
 
-    def __init__(self, series, *features, batch_size, enc_lens, dec_lens,
-                 time_free_space=None, mode="train", shuffle=True):
-        self.series = series
-        self.series_idx = np.arange(series.series.shape[0])
+    def __init__(self, xy, batch_size, enc_lens, dec_lens, shuffle=True, time_free_space=None, mode="train",
+                 enc_num_feats=None, dec_num_feats=None, enc_cat_feats=None, dec_cat_feats=None):
+        self.xy = xy
+        self.series_idx = np.arange(xy.values.shape[0])
         self.num_series = len(self.series_idx)
-        self.times_idx = np.arange(series.series.shape[1])
+        self.times_idx = np.arange(xy.values.shape[2])
         self.series_len = len(self.times_idx)
 
-        self.enc_num_feats = FeatureStore([f for f in features if f.ftype == "num" and f.enc])
-        self.dec_num_feats = FeatureStore([f for f in features if f.ftype == "num" and f.dec])
-        self.enc_cat_feats = FeatureStore([f for f in features if f.ftype == "cat" and f.enc])
-        self.dec_cat_feats = FeatureStore([f for f in features if f.ftype == "cat" and f.dec])
+        self.enc_num_feats = FeatureStore(enc_num_feats)
+        self.dec_num_feats = FeatureStore(dec_num_feats)
+        self.enc_cat_feats = FeatureStore(enc_cat_feats)
+        self.dec_cat_feats = FeatureStore(dec_cat_feats)
 
         self.batch_size = batch_size
         self.enc_lens = enc_lens
@@ -105,12 +110,9 @@ class SeriesFrame:
         assert self._time_free_space < enc_lens and self._time_free_space < dec_lens
 
         self.is_single = self.num_series == 1
+        assert mode in ["train", "eval"]
         self.mode = mode
-        self._shuffle = shuffle
-
-    def shuffle(self):
-        if self.mode == 'train':
-            random.shuffle(self.series_idx)
+        self.shuffle = shuffle
 
     @property
     def time_free_space(self):
@@ -123,8 +125,11 @@ class SeriesFrame:
         return random.randint(-self._time_free_space, self._time_free_space)
 
     def __len__(self):
-        num_time = (self.series_len - self.enc_lens - self.dec_lens - self.time_free_space * 2 + 1) // self.batch_size
-        return self.num_series * num_time
+        num_time = (self.series_len - self.enc_lens - self.dec_lens - self.time_free_space * 2 + 1)
+        if self.is_single:
+            return num_time // self.batch_size
+        else:
+            return self.num_series // self.batch_size
 
     @property
     def num_batchs(self):
@@ -139,24 +144,24 @@ class SeriesFrame:
         if self.shuffle:
             random.shuffle(start_space)
         for batch in range(len(start_space) // self.batch_size):
-            batch_start_idxes = start_space[batch * self.batch_size: (batch + 1) * self.batch_size]
+            batch_start = start_space[batch * self.batch_size: (batch + 1) * self.batch_size]
             enc_len = self.enc_lens + self.get_time_free()
             dec_len = self.dec_lens + self.get_time_free()
             enc_time_idx, dec_time_idx = [], []
-            for start in batch_start_idxes:
+            for start in batch_start:
                 enc_time_idx.append(np.arange(start, start+enc_len))
                 dec_time_idx.append(np.arange(start+enc_len, start+enc_len+dec_len))
             enc_time_idx = np.array(enc_time_idx)
             dec_time_idx = np.array(dec_time_idx)
-            enc_x = np.expand_dims(self.series.read_batch(0, enc_time_idx), 1)
-            dec_x = self.series.read_batch(0, dec_time_idx)
+            enc_x = self.xy.read_batch(0, enc_time_idx)
+            dec_x = self.xy.read_batch(0, dec_time_idx)
 
             feed_dict = {
                 "enc_x": check_to_tensor(enc_x),
-                "enc_numerical": check_to_tensor(self.enc_num_feats.read_batch(0, enc_time_idx)),
-                "enc_categorical": check_to_tensor(self.enc_cat_feats.read_batch(0, enc_time_idx)),
-                "dec_numerical": check_to_tensor(self.dec_num_feats.read_batch(0, dec_time_idx)),
-                "dec_categorical": check_to_tensor(self.dec_cat_feats.read_batch(0, dec_time_idx)),
+                "enc_num": check_to_tensor(self.enc_num_feats.read_batch(0, enc_time_idx)),
+                "enc_cat": check_to_tensor(self.enc_cat_feats.read_batch(0, enc_time_idx)),
+                "dec_num": check_to_tensor(self.dec_num_feats.read_batch(0, dec_time_idx)),
+                "dec_cat": check_to_tensor(self.dec_cat_feats.read_batch(0, dec_time_idx)),
                 "dec_len": dec_len
             }
             yield feed_dict, check_to_tensor(dec_x)
@@ -170,18 +175,19 @@ class SeriesFrame:
             start = random.choice(start_space)
             enc_len = self.enc_lens + self.get_time_free()
             dec_len = self.dec_lens + self.get_time_free()
-            enc_time_idx = np.arange(start, start+enc_len)
-            dec_time_idx = np.arange(start+enc_len, start+enc_len+dec_len)
+            enc_time_idx = np.expand_dims(np.arange(start, start+enc_len), axis=0)
+            dec_time_idx = np.expand_dims(np.arange(start+enc_len, start+enc_len+dec_len), axis=0)
 
-            enc_x = self.series.read_batch(batch_series_idx, enc_time_idx)
-            dec_x = self.series.read_batch(batch_series_idx, dec_time_idx)
+            enc_x = self.xy.read_batch(batch_series_idx, enc_time_idx)
+            dec_x = self.xy.read_batch(batch_series_idx, dec_time_idx)
 
             feed_dict = {
                 "enc_x": check_to_tensor(enc_x),
-                "enc_numerical": check_to_tensor(self.enc_num_feats.read_batch(batch_series_idx, enc_time_idx)),
-                "enc_categorical": check_to_tensor(self.enc_cat_feats.read_batch(batch_series_idx, enc_time_idx)),
-                "dec_numerical": check_to_tensor(self.dec_num_feats.read_batch(batch_series_idx, dec_time_idx)),
-                "dec_categorical": check_to_tensor(self.dec_cat_feats.read_batch(batch_series_idx, dec_time_idx))
+                "enc_num": check_to_tensor(self.enc_num_feats.read_batch(batch_series_idx, enc_time_idx)),
+                "enc_cat": check_to_tensor(self.enc_cat_feats.read_batch(batch_series_idx, enc_time_idx)),
+                "dec_num": check_to_tensor(self.dec_num_feats.read_batch(batch_series_idx, dec_time_idx)),
+                "dec_cat": check_to_tensor(self.dec_cat_feats.read_batch(batch_series_idx, dec_time_idx)),
+                "dec_len": dec_len
             }
             yield feed_dict, check_to_tensor(dec_x)
 
@@ -200,23 +206,3 @@ def check_to_tensor(x):
         return x
     return torch.as_tensor(x)
 
-
-if __name__ == "__main__":
-    # single test
-    x = SeriesFeature("x", "num", np.random.rand(1, 200))
-    f_series_num = SeriesFeature("SeriesFeature", "num", np.random.rand(1, 200))
-    f_series_cat = SeriesFeature("SeriesCat", "cat", np.random.randint(0, 100, (1, 200)), embedding=(100, 2))
-    frame = SeriesFrame(x, f_series_cat, f_series_num, batch_size=4, enc_lens=20, dec_lens=20, time_free_space=2)
-
-    for x, y in frame:
-        print(y.shape)
-
-    # multi test
-    x = SeriesFeature("x", "num", np.random.rand(20, 200))
-    f_series_num = SeriesFeature("SeriesFeature", "num", np.random.rand(20, 200))
-    f_series_cat = SeriesFeature("SeriesCat", "cat", np.random.randint(0, 100, (20, 200)), embedding=(100, 2))
-    f_proper_num = PropertyFeature("proper", "num", np.random.randint(0,10,20))
-    frame = SeriesFrame(x, f_series_cat, f_series_num, f_proper_num, batch_size=4, enc_lens=20, dec_lens=20, time_free_space=2)
-
-    for x, y in frame:
-        print(y.shape)

@@ -126,16 +126,16 @@ class WaveNet(nn.Module):
         y_hat, updated_queues = self.dec(x, dec_features, queues)
         return y_hat, updated_queues
 
-    def predict(self, enc_x, dec_len, enc_numerical=None, enc_categorical=None,
-                dec_numerical=None, dec_categorical=None):
+    def predict(self, enc_x, dec_len, enc_num=None, enc_cat=None,
+                dec_num=None, dec_cat=None):
         if not isinstance(dec_len, int):
             dec_len = dec_len[0]
         results = []
-        queues = self.encode(enc_x, enc_numerical, enc_categorical)
+        queues = self.encode(enc_x, enc_num, enc_cat)
         step_x = enc_x[:, :, -1].unsqueeze(2)
         for step in range(dec_len):
-            step_numerical = dec_numerical[:, :, -1].unsqueeze(2) if dec_numerical is not None else None
-            step_categorical = dec_categorical[:, :, -1].unsqueeze(2) if dec_categorical is not None else None
+            step_numerical = dec_num[:, :, -1].unsqueeze(2) if dec_num is not None else None
+            step_categorical = dec_cat[:, :, -1].unsqueeze(2) if dec_cat is not None else None
             step_x, queues = self.decode(step_x, queues, step_numerical, step_categorical)
             results.append(step_x)
         y_hat = torch.cat(results, dim=2)
