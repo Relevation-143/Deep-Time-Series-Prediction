@@ -46,7 +46,7 @@ class CausalConv1d(nn.Conv1d):
     """
 
     def __init__(self, in_channels, out_channels, kernel_size, stride=1,
-                 dilation=1, groups=1, bias=True, padding_mode='zeros'):
+                 dilation=1, groups=1, bias=True, padding_mode='zeros', batch_norm=False):
         self.shift = (kernel_size - 1) * dilation
         super(CausalConv1d, self).__init__(
             in_channels,
@@ -58,53 +58,13 @@ class CausalConv1d(nn.Conv1d):
             groups=groups,
             bias=bias,
             padding_mode=padding_mode)
-        self.bn = nn.BatchNorm1d(out_channels)
+        self.batch_norm = nn.BatchNorm1d(out_channels) if batch_norm else None
 
     def forward(self, inputs):
         result = super(CausalConv1d, self).forward(inputs)
         if self.padding != 0:
             return result[:, :, :-self.shift]
-        return self.bn(result)
-
-
-class WaveBlockV1(nn.Module):
-
-    """
-    WaveNet convolution block implementation version 1.
-
-    Args:
-        inputs, shape(batch, channels, seqs)
-
-    References:
-        kaggle 6th solution: https://github.com/sjvasquez/web-traffic-forecasting/blob/master/cnn.py
-        model graph: https://miro.medium.com/max/1400/1*0TbaaX8l86ghbGEhuSjPzw.jpegx
-    """
-
-    def __init__(self, input_channels, residual_channels, skip_channels, kernel_size, dilation):
-        super().__init__()
-        self.residual_channels = residual_channels
-        self.skip_channels = skip_channels
-        self.conv = CausalConv1d(input_channels, residual_channels * 4,
-                                 kernel_size, dilation=dilation)
-
-    def forward(self, inputs):
-        dilated_inputs = self.conv(inputs)
-        return dilated_inputs
-
-
-# if __name__ == "__main__":
-#     batch = 1
-#     seq_lens = 10
-#     input_dim = 4
-#     output_dim = 8
-#     kernel_size = 2
-#     dilation = 2
-#
-#     residual_channels = 4
-#     skip_channels = 8
-#
-#     inputs = torch.rand(batch, input_dim, seq_lens)
-#     block_v1 = WaveBlockV1(input_dim, residual_channels,
-#                            skip_channels, kernel_size, dilation)
-#     skip, residual = block_v1(inputs)
-#     print(skip.shape, residual.shape)
+        if self.batch_norm is not None:
+            return self.batch_norm(result)
+        else:
+            return result

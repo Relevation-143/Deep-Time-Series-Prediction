@@ -34,8 +34,6 @@ class TimeSeries:
         Returns:
             shape(batch = J / I, dim, seq)
         """
-        if self.n == 1:
-            assert len(series_idx) == 1
         if self.idx_map is not None:
             series_idx = np.array([self.idx_map[i] for i in series_idx])
         batch_size = series_idx.shape[0] * time_idx.shape[0]

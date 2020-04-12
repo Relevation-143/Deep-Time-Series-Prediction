@@ -14,10 +14,11 @@ import numpy as np
 
 class Learner:
 
-    def __init__(self, model, optimizer, loss_fn, root_dir, log_interval=4):
+    def __init__(self, model, optimizer, loss_fn, root_dir, log_interval=4, lr_scheduler=None):
         self.model = model
         self.optimizer = optimizer
         self.loss_fn = loss_fn
+        self.lr_scheduler = lr_scheduler
 
         self.root_dir = root_dir
         self.log_dir = os.path.join(root_dir, 'logs')
@@ -48,6 +49,8 @@ class Learner:
     def fit(self, max_epochs, train_dl, valid_dl, early_stopping=True, patient=10, start_save=-1):
         with SummaryWriter(self.log_dir) as writer:
             # writer.add_graph(self.model)
+            logging.info(f"start training >>>>>>>>>>>"
+                         f"see log: tensorboard --logdir {self.log_dir}")
             best_score = np.inf
             bad_epochs = 0
             global_steps = 0
@@ -69,7 +72,7 @@ class Learner:
                     valid_loss += loss / len(valid_dl)
                 writer.add_scalar("Loss/valid", valid_loss, global_steps)
                 logging.info(f"epoch {epoch} / {max_epochs}, batch 100%, "
-                             f"train_loss {train_loss / len(train_dl):.4f}, valid loss {valid_loss:.4f}")
+                             f"train loss {train_loss / len(train_dl):.4f}, valid loss {valid_loss:.4f}")
 
                 self.losses.append(valid_loss)
 
@@ -85,15 +88,18 @@ class Learner:
                             print("early stopping!")
                             break
                 best_score = min(self.losses)
+                if self.lr_scheduler is not None:
+                    self.lr_scheduler.step()
+                writer.add_scalar('lr', self.optimizer.param_groups[0]['lr'], global_steps)
                 self.epochs += 1
-            print(f"training finished, best epoch {np.argmin(self.losses)}, best valid loss {best_score:.4f}")
+            logging.info(f"training finished, best epoch {np.argmin(self.losses)}, best valid loss {best_score:.4f}")
 
     def loss_batch(self, x, y):
         if isinstance(x, dict):
             y_hat = self.model.predict(**x)
         else:
             y_hat = self.model.predict(*x)
-        loss = self.loss_fn(y_hat, y)
+        loss = self.loss_fn(y_hat, y) # / y.shape[0]  # add gradient normalize
         loss.backward()
         self.optimizer.step()
         self.optimizer.zero_grad()
@@ -105,7 +111,7 @@ class Learner:
                 y_hat = self.model.predict(**x)
             else:
                 y_hat = self.model.predict(*x)
-            loss = self.loss_fn(y, y_hat)
+            loss = self.loss_fn(y, y_hat) # / y.shape[0]  # add gradient normalize
         return loss.item()
 
     def load(self, model_checkpoint_path):
@@ -113,6 +119,7 @@ class Learner:
         self.model.load_state_dict(checkpoint['model'])
         self.optimizer.load_state_dict(checkpoint['optimizer'])
         self.epochs = checkpoint['epochs']
+        self.lr_scheduler = checkpoint['lr_scheduler']
 
     def predict(self, *args, **kwargs):
         return self.model.predict(*args, **kwargs)
@@ -122,6 +129,7 @@ class Learner:
             "model": self.model.state_dict(),
             "optimizer": self.optimizer.state_dict(),
             "epochs": self.epochs,
+            'lr_scheduler': self.lr_scheduler,
         }
 
         name = f"model-epoch-{self.epochs}.pkl"

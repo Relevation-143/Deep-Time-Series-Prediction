@@ -2,4 +2,4 @@
 # Author: 周知瑞
 # Mail: evilpsycho42@gmail.com
 
-from .cnn import CausalConv1d, TimeDistributedDense1D, WaveBlockV1
+from .cnn import CausalConv1d, TimeDistributedDense1D

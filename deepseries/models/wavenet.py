@@ -35,14 +35,14 @@ class WaveEncoder(nn.Module):
         inputs = torch.cat([x, features], dim=1) if features is not None else x
         h = self.fc_h(inputs)
         c = self.fc_c(inputs)
-        queues = [h]
+        states = [h]
         for cnn in self.cnn_layers:
             dilation_inputs = cnn(h)
             input_gate, conv_filter, conv_gate, emit_gate = torch.split(dilation_inputs, self.residual_channels, dim=1)
             c = torch.sigmoid(input_gate) * c + torch.tanh(conv_filter) * torch.sigmoid(conv_gate)
             h = torch.sigmoid(emit_gate) * torch.tanh(c)
-            queues.append(h)
-        return queues
+            states.append(h)
+        return states
 
 
 class WaveDecoder(nn.Module):
@@ -57,7 +57,7 @@ class WaveDecoder(nn.Module):
         super().__init__()
         self.features_dim = features_dim if features_dim else 0
         self.source_dim = source_dim
-        self.inputs_dim = self.features_dim + source_dim
+        self.inputs_dim = self.features_dim + source_dim * 2
         self.residual_channels = residual_channels
         self.skip_channels = skip_channels
         self.dilations = dilations
@@ -68,13 +68,13 @@ class WaveDecoder(nn.Module):
         self.cnn_layers = nn.ModuleList([nn.Conv1d(residual_channels, residual_channels * 4, k)
                                          for k, d in zip(kernels_size, dilations)])
         self.fc_out_1 = TimeDistributedDense1D(len(dilations) * skip_channels, 128, F.relu)
-        self.fc_out_2 = TimeDistributedDense1D(128, self.source_dim)
+        self.fc_out_2 = TimeDistributedDense1D(128, self.source_dim * 2)
 
     def forward(self, x, features, queues):
         inputs = torch.cat([x, features], dim=1) if features is not None else x
         h = self.fc_h(inputs)
         c = self.fc_c(inputs)
-        skips, update_queues = [], []
+        skips, update_queues = [], []  # TODO
 
         for state, cnn, dilation in zip(queues, self.cnn_layers, self.dilations):
             state_len = state.shape[2]
@@ -88,6 +88,8 @@ class WaveDecoder(nn.Module):
             h = torch.sigmoid(emit_gate) * torch.tanh(c)
             skips.append(h)
             update_queues.append(torch.cat([state, h], dim=2))
+        # TODO
+        # update_queues.pop(-1)
         skips = torch.cat(skips, dim=1)
         y_hidden = self.fc_out_1(skips)
         h_hat = self.fc_out_2(y_hidden)
@@ -110,11 +112,11 @@ class WaveNet(nn.Module):
                  kernels_size=[2 for i in range(8)] * 3,
                  ):
         super().__init__()
-
+        self.source_dim = source_dim
         self.enc_trans = SeriesFeatureTransformer(enc_compress, enc_numerical, enc_categorical)
         self.enc = WaveEncoder(self.enc_trans.output_dim, source_dim, residual_channels, skip_channels, dilations, kernels_size)
         self.dec_trans = SeriesFeatureTransformer(dec_compress, dec_numerical, dec_categorical)
-        self.dec = WaveDecoder(self.enc_trans.output_dim, source_dim, residual_channels, skip_channels, dilations, kernels_size)
+        self.dec = WaveDecoder(self.dec_trans.output_dim, source_dim, residual_channels, skip_channels, dilations, kernels_size)
 
     def encode(self, x, numerical=None, categorical=None):
         enc_features = self.enc_trans(numerical, categorical)
@@ -138,8 +140,9 @@ class WaveNet(nn.Module):
             step_categorical = dec_cat[:, :, -1].unsqueeze(2) if dec_cat is not None else None
             step_x, queues = self.decode(step_x, queues, step_numerical, step_categorical)
             results.append(step_x)
-        y_hat = torch.cat(results, dim=2)
-        return y_hat  # (B, N, S)
+        y_hat, p = torch.cat(results, dim=2).split(self.source_dim, dim=1)  # (B, 2*N, S)
+        y_hat = torch.sigmoid(p) * y_hat
+        return y_hat
 
     def forward(self, feed):
         y_hat = self.predict(**feed)
