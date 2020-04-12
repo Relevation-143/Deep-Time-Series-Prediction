@@ -27,7 +27,6 @@ class TimeSeries:
 
     def read_batch(self, series_idx, time_idx):
         """
-
         Args:
             series_idx: shape(I)
             time_idx: shape(J, seq)
@@ -54,7 +53,6 @@ class Property:
             values (np.ndarray): shape(N, dim)
             idx_map: dict
         """
-        assert isinstance(values, dict)
         self.values = values
         self.idx_map = idx_map
 
@@ -89,8 +87,8 @@ class FeatureStore:
 
 class SeriesFrame:
 
-    def __init__(self, xy, batch_size, enc_lens, dec_lens, shuffle=True, time_free_space=None, mode="train",
-                 enc_num_feats=None, dec_num_feats=None, enc_cat_feats=None, dec_cat_feats=None):
+    def __init__(self, xy, batch_size, enc_lens, dec_lens, shuffle=True, time_free_space=None, mode="train", drop_last=False,
+                 enc_num_feats=None, dec_num_feats=None, enc_cat_feats=None, dec_cat_feats=None, use_cuda=False):
         self.xy = xy
         self.series_idx = np.arange(xy.values.shape[0])
         self.num_series = len(self.series_idx)
@@ -113,6 +111,8 @@ class SeriesFrame:
         assert mode in ["train", "eval"]
         self.mode = mode
         self.shuffle = shuffle
+        self.use_cuda = use_cuda
+        self.drop_last = drop_last
 
     @property
     def time_free_space(self):
@@ -122,14 +122,17 @@ class SeriesFrame:
             return self._time_free_space
 
     def get_time_free(self):
-        return random.randint(-self._time_free_space, self._time_free_space)
+        return random.randint(-self.time_free_space, self.time_free_space)
 
     def __len__(self):
         num_time = (self.series_len - self.enc_lens - self.dec_lens - self.time_free_space * 2 + 1)
         if self.is_single:
-            return num_time // self.batch_size
+            num = num_time // self.batch_size
         else:
-            return self.num_series // self.batch_size
+            num = self.num_series // self.batch_size
+        if not self.drop_last:
+            num += 1
+        return num
 
     @property
     def num_batchs(self):
@@ -141,9 +144,9 @@ class SeriesFrame:
 
     def _single_batch_generate(self):
         start_space = np.arange(0, self.series_len - self.enc_lens - self.dec_lens - self.time_free_space * 2 + 1)
-        if self.shuffle:
+        if self.shuffle and self.mode == "train":
             random.shuffle(start_space)
-        for batch in range(len(start_space) // self.batch_size):
+        for batch in range(len(self)):
             batch_start = start_space[batch * self.batch_size: (batch + 1) * self.batch_size]
             enc_len = self.enc_lens + self.get_time_free()
             dec_len = self.dec_lens + self.get_time_free()
@@ -154,23 +157,26 @@ class SeriesFrame:
             enc_time_idx = np.array(enc_time_idx)
             dec_time_idx = np.array(dec_time_idx)
             enc_x = self.xy.read_batch(0, enc_time_idx)
-            dec_x = self.xy.read_batch(0, dec_time_idx)
 
             feed_dict = {
-                "enc_x": check_to_tensor(enc_x),
-                "enc_num": check_to_tensor(self.enc_num_feats.read_batch(0, enc_time_idx)),
-                "enc_cat": check_to_tensor(self.enc_cat_feats.read_batch(0, enc_time_idx)),
-                "dec_num": check_to_tensor(self.dec_num_feats.read_batch(0, dec_time_idx)),
-                "dec_cat": check_to_tensor(self.dec_cat_feats.read_batch(0, dec_time_idx)),
+                "enc_x": self.check_to_tensor(enc_x),
+                "enc_num": self.check_to_tensor(self.enc_num_feats.read_batch(0, enc_time_idx)),
+                "enc_cat": self.check_to_tensor(self.enc_cat_feats.read_batch(0, enc_time_idx)),
+                "dec_num": self.check_to_tensor(self.dec_num_feats.read_batch(0, dec_time_idx)),
+                "dec_cat": self.check_to_tensor(self.dec_cat_feats.read_batch(0, dec_time_idx)),
                 "dec_len": dec_len
             }
-            yield feed_dict, check_to_tensor(dec_x)
+            if self.mode == "train":
+                dec_x = self.xy.read_batch(0, dec_time_idx)
+                yield feed_dict, self.check_to_tensor(dec_x).float()
+            else:
+                yield feed_dict
 
     def _multi_generate_batch(self):
         start_space = np.arange(0, self.series_len - self.enc_lens - self.dec_lens - self.time_free_space * 2 + 1)
-        if self.shuffle:
+        if self.shuffle and self.mode=="train":
             random.shuffle(self.series_idx)
-        for batch in range(len(self.series_idx) // self.batch_size):
+        for batch in range(len(self)):
             batch_series_idx = self.series_idx[batch * self.batch_size: (batch + 1) * self.batch_size]
             start = random.choice(start_space)
             enc_len = self.enc_lens + self.get_time_free()
@@ -179,17 +185,21 @@ class SeriesFrame:
             dec_time_idx = np.expand_dims(np.arange(start+enc_len, start+enc_len+dec_len), axis=0)
 
             enc_x = self.xy.read_batch(batch_series_idx, enc_time_idx)
-            dec_x = self.xy.read_batch(batch_series_idx, dec_time_idx)
 
             feed_dict = {
-                "enc_x": check_to_tensor(enc_x),
-                "enc_num": check_to_tensor(self.enc_num_feats.read_batch(batch_series_idx, enc_time_idx)),
-                "enc_cat": check_to_tensor(self.enc_cat_feats.read_batch(batch_series_idx, enc_time_idx)),
-                "dec_num": check_to_tensor(self.dec_num_feats.read_batch(batch_series_idx, dec_time_idx)),
-                "dec_cat": check_to_tensor(self.dec_cat_feats.read_batch(batch_series_idx, dec_time_idx)),
+                "enc_x": self.check_to_tensor(enc_x).float(),
+                "enc_num": self.check_to_tensor(self.enc_num_feats.read_batch(batch_series_idx, enc_time_idx)).float(),
+                "enc_cat": self.check_to_tensor(self.enc_cat_feats.read_batch(batch_series_idx, enc_time_idx)),
+                "dec_num": self.check_to_tensor(self.dec_num_feats.read_batch(batch_series_idx, dec_time_idx)).float(),
+                "dec_cat": self.check_to_tensor(self.dec_cat_feats.read_batch(batch_series_idx, dec_time_idx)),
                 "dec_len": dec_len
             }
-            yield feed_dict, check_to_tensor(dec_x)
+
+            if self.mode == "train":
+                dec_x = self.xy.read_batch(batch_series_idx, dec_time_idx)
+                yield feed_dict, self.check_to_tensor(dec_x).float()
+            else:
+                yield feed_dict
 
     def generate_batch(self):
         if self.is_single:
@@ -200,9 +210,22 @@ class SeriesFrame:
     def __iter__(self):
         return self.generate_batch()
 
+    def cuda(self):
+        self.use_cuda = True
 
-def check_to_tensor(x):
-    if x is None:
-        return x
-    return torch.as_tensor(x)
+    def cpu(self):
+        self.use_cuda = False
 
+    def train(self):
+        self.mode = 'train'
+
+    def eval(self):
+        self.mode = 'eval'
+
+    def check_to_tensor(self, x):
+        if x is None:
+            return x
+        if self.use_cuda:
+            return torch.as_tensor(x).cuda()
+        else:
+            return torch.as_tensor(x)

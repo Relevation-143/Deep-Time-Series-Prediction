@@ -2,17 +2,9 @@
 # Author: 周知瑞
 # Mail: evilpsycho42@gmail.com
 
-from collections import deque
-import os
-import logging
-from torch import nn, optim
-from datetime import datetime
-from deepseries.utils import HyperParameters
-from fastai.train import Learner, ItemBase
-
 
 class EMA:
-
+    # TODO
     """Weights Exponential Moving Average.
 
     Args:

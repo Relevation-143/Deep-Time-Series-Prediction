@@ -10,13 +10,13 @@ from setuptools import setup
 
 
 setup(
-    name='dtsp',
-    version='0.3.4',
-    description='DeepLearning for Time Series Prediction Library',
+    name='deepseries',
+    version='0.4',
+    description='deep learning library for time series prediction.',
     author='zhirui zhou',
     author_email='evilpsycho42@gmail.com',
     license="Apache 2.0",
-    url='https://github.com/EvilPsyCHo/competition',
-    packages={'dtsp', 'dtsp.dataset', 'dtsp.models', 'dtsp.modules'},
+    url='https://github.com/EvilPsyCHo/Deep-Time-Series-Prediction',
+    packages={'deepseries', 'deepseries.layers', 'deepseries.models'},
     package_data={'dtsp': ['dataset/*.csv']},
 )

@@ -51,7 +51,7 @@ class Learner:
             best_score = np.inf
             bad_epochs = 0
             global_steps = 0
-            for epoch in range(max_epochs):
+            for epoch in range(1, max_epochs+1):
                 self.model.train()
                 train_loss = 0
                 for i, (x, y) in enumerate(train_dl):
@@ -60,7 +60,7 @@ class Learner:
                     global_steps += 1
                     train_loss += loss
                     if global_steps % self.log_interval == 0:
-                        logging.info(f"epoch: {epoch} / {max_epochs}, batch: {i/len(train_dl)*100:.0f}%, "
+                        logging.info(f"epoch {epoch} / {max_epochs}, batch {i/len(train_dl)*100:3.0f}%, "
                                      f"train loss {train_loss / (i+1):.4f}")
                 valid_loss = 0
                 self.model.eval()
@@ -68,10 +68,10 @@ class Learner:
                     loss = self.eval_batch(x, y)
                     valid_loss += loss / len(valid_dl)
                 writer.add_scalar("Loss/valid", valid_loss, global_steps)
-                logging.info(f"epoch: {epoch} / {max_epochs} finished, valid loss {valid_loss:.4f}")
+                logging.info(f"epoch {epoch} / {max_epochs}, batch 100%, "
+                             f"train_loss {train_loss / len(train_dl):.4f}, valid loss {valid_loss:.4f}")
 
                 self.losses.append(valid_loss)
-                self.epochs += 1
 
                 if epoch >= start_save:
                     self.save()
@@ -85,7 +85,8 @@ class Learner:
                             print("early stopping!")
                             break
                 best_score = min(self.losses)
-                print(f"training finished, best epoch {np.argmin(self.losses)}, best valid loss {best_score:.4f}")
+                self.epochs += 1
+            print(f"training finished, best epoch {np.argmin(self.losses)}, best valid loss {best_score:.4f}")
 
     def loss_batch(self, x, y):
         if isinstance(x, dict):

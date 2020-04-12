@@ -16,12 +16,12 @@ class TimeDistributedDense1D(nn.Module):
         out_features: out_channels.
         bias: (bool), default True.
         activation: (callable)
-        batch_norm: (bool or None), BatchNorm1d,
+        batch_norm: (bool), default false, if true then add BatchNorm1d layer
         dropout: (float)
     """
 
     def __init__(self, in_features, out_features, bias=True, activation=None,
-                 batch_norm=None, dropout=None):
+                 batch_norm=False, dropout=None):
         super().__init__()
         self.fc = nn.Linear(in_features, out_features, bias)
         self.activation = activation
