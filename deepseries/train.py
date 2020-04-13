@@ -14,11 +14,12 @@ import numpy as np
 
 class Learner:
 
-    def __init__(self, model, optimizer, loss_fn, root_dir, log_interval=4, lr_scheduler=None):
+    def __init__(self, model, optimizer, loss_fn, root_dir, log_interval=4, lr_scheduler=None, grad_clip=5):
         self.model = model
         self.optimizer = optimizer
         self.loss_fn = loss_fn
         self.lr_scheduler = lr_scheduler
+        self.grad_clip = grad_clip
 
         self.root_dir = root_dir
         self.log_dir = os.path.join(root_dir, 'logs')
@@ -49,7 +50,7 @@ class Learner:
     def fit(self, max_epochs, train_dl, valid_dl, early_stopping=True, patient=10, start_save=-1):
         with SummaryWriter(self.log_dir) as writer:
             # writer.add_graph(self.model)
-            logging.info(f"start training >>>>>>>>>>>"
+            logging.info(f"start training >>>>>>>>>>>  "
                          f"see log: tensorboard --logdir {self.log_dir}")
             best_score = np.inf
             bad_epochs = 0
@@ -95,23 +96,24 @@ class Learner:
             logging.info(f"training finished, best epoch {np.argmin(self.losses)}, best valid loss {best_score:.4f}")
 
     def loss_batch(self, x, y):
-        if isinstance(x, dict):
-            y_hat = self.model.predict(**x)
-        else:
-            y_hat = self.model.predict(*x)
-        loss = self.loss_fn(y_hat, y) # / y.shape[0]  # add gradient normalize
-        loss.backward()
-        self.optimizer.step()
         self.optimizer.zero_grad()
+        if isinstance(x, dict):
+            y_hat = self.model(**x)
+        else:
+            y_hat = self.model(*x)
+        loss = self.loss_fn(y_hat, y)  # / y.shape[0]  # add gradient normalize
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.grad_clip)
+        self.optimizer.step()
         return loss.item()
 
     def eval_batch(self, x, y):
         with torch.no_grad():
             if isinstance(x, dict):
-                y_hat = self.model.predict(**x)
+                y_hat = self.model(**x)
             else:
-                y_hat = self.model.predict(*x)
-            loss = self.loss_fn(y, y_hat) # / y.shape[0]  # add gradient normalize
+                y_hat = self.model(*x)
+            loss = self.loss_fn(y, y_hat)  # / y.shape[0]  # add gradient normalize
         return loss.item()
 
     def load(self, model_checkpoint_path):
@@ -120,9 +122,6 @@ class Learner:
         self.optimizer.load_state_dict(checkpoint['optimizer'])
         self.epochs = checkpoint['epochs']
         self.lr_scheduler = checkpoint['lr_scheduler']
-
-    def predict(self, *args, **kwargs):
-        return self.model.predict(*args, **kwargs)
 
     def save(self):
         checkpoint = {
