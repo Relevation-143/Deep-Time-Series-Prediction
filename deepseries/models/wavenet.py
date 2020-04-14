@@ -31,7 +31,7 @@ class WaveEncoder(nn.Module):
         self.fc_c = TimeDistributedDense1d(self.inputs_dim, residual_channels, torch.tanh, dropout=dropout)
         self.cnns = nn.ModuleList(
             [CausalConv1d(residual_channels, residual_channels * 4, k, dilation=d)
-             for k, d in zip(kernels_size[:-1], dilations[:-1])])
+             for k, d in zip(kernels_size[:-1], dilations[:-1])])  # TODO
 
     def forward(self, x, features=None):
         inputs = torch.cat([x, features], dim=1) if features is not None else x

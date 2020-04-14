@@ -6,6 +6,7 @@
 """
 import torch
 import random
+import itertools
 import numpy as np
 
 
@@ -32,7 +33,7 @@ class TimeSeries:
             time_idx: shape(J, seq)
 
         Returns:
-            shape(batch = J / I, dim, seq)
+            shape(batch, dim, seq)
         """
         if self.idx_map is not None:
             series_idx = np.array([self.idx_map[i] for i in series_idx])
@@ -73,15 +74,111 @@ class Property:
 class FeatureStore:
 
     def __init__(self, features=None):
-        self.features = [] if features is None else features
+        self.features = features
 
     def read_batch(self, series_idx, time_idx):
-        if len(self.features) == 0:
+        if self.features is None:
             return None
         else:
             batch = np.concatenate([f.read_batch(series_idx, time_idx) for f in self.features], axis=1)
             return batch
 
+
+class Seq2SeqDataLoader:
+
+    def __init__(self, xy, batch_size, enc_lens, dec_lens, shuffle=True, use_cuda=False,
+                 time_free_space=0, time_interval=1, time_generate_method='auto', mode="train", drop_last=False,
+                 enc_num_feats=None, dec_num_feats=None, enc_cat_feats=None, dec_cat_feats=None, seed=42):
+        self.xy = xy
+        self.series_size = xy.values.shape[0]
+        self.series_idx = np.arange(xy.values.shape[0])
+        self.time_size = xy.values.shape[2]
+        self.time_idx = np.arange(xy.values.shape[2])
+        self.batch_size = batch_size
+        self.enc_lens = enc_lens
+        self.dec_lens = dec_lens
+        self.shuffle = shuffle
+
+        self.use_cuda = use_cuda
+        self.time_free_space = time_free_space
+        self.time_interval = time_interval
+        if time_generate_method == 'auto':
+            if self.series_size == 1: self.time_generate_method = 'full'
+            else: self.time_generate_method = 'once'
+        else: self.time_generate_method = time_generate_method
+        self.mode = mode
+        self.drop_last = drop_last
+
+        self.enc_num_feats = FeatureStore(enc_num_feats)
+        self.dec_num_feats = FeatureStore(dec_num_feats)
+        self.enc_cat_feats = FeatureStore(enc_cat_feats)
+        self.dec_cat_feats = FeatureStore(dec_cat_feats)
+
+        self.seed = seed
+        self.random = np.random.RandomState(seed)
+
+    def __len__(self):
+        """ return num batch in one epoch"""
+        ns = self.series_size
+        if self.time_generate_method == 'once': nt = 1
+        else: nt = (self.time_size - 2 * self.time_free_space) % self.time_interval
+        num_batch = ns * nt % self.batch_size + 1 if not self.drop_last else 0
+        return num_batch
+
+    def read_batch(self, batch_series_idx, enc_time_idx, dec_time_idx):
+
+        dec_len = dec_time_idx.shape[1]
+        enc_x = self.xy.read_batch(batch_series_idx, enc_time_idx)
+        feed_dict = {
+            "enc_x": self.check_to_tensor(enc_x).float(),
+            "enc_num": self.check_to_tensor(self.enc_num_feats.read_batch(batch_series_idx, enc_time_idx)).float(),
+            "enc_cat": self.check_to_tensor(self.enc_cat_feats.read_batch(batch_series_idx, enc_time_idx)),
+            "dec_num": self.check_to_tensor(self.dec_num_feats.read_batch(batch_series_idx, dec_time_idx)).float(),
+            "dec_cat": self.check_to_tensor(self.dec_cat_feats.read_batch(batch_series_idx, dec_time_idx)),
+            "dec_len": dec_len
+        }
+
+        if self.mode == "train":
+            dec_x = self.xy.read_batch(batch_series_idx, dec_time_idx)
+            return feed_dict, self.check_to_tensor(dec_x).float()
+        else:
+            return feed_dict
+
+    def get_start_space(self):
+        if self.mode == "eval": time_free_space = 0
+        else: time_free_space = self.time_free_space
+        valid_space = self.series_size - self.enc_lens - self.dec_lens - time_free_space * 2 + 1
+        space = np.arange(0, valid_space)
+        return space
+
+    def __iter__(self):
+        start_space = self.get_start_space()
+        series_space = self.series_idx
+
+
+    def cuda(self):
+        self.use_cuda = True
+        return self
+
+    def cpu(self):
+        self.use_cuda = False
+        return self
+
+    def train(self):
+        self.mode = 'train'
+        return self
+
+    def eval(self):
+        self.mode = 'eval'
+        return self
+
+    def check_to_tensor(self, x):
+        if x is None:
+            return x
+        if self.use_cuda:
+            return torch.as_tensor(x).cuda()
+        else:
+            return torch.as_tensor(x)
 
 class SeriesFrame:
 
@@ -126,7 +223,12 @@ class SeriesFrame:
     def __len__(self):
         n_time = (self.series_len - self.enc_lens - self.dec_lens - self.time_free_space * 2 + 1)
         n_series = self.num_series
-        n = n_series * n_time // self.batch_size
+        if self.is_single: n = n_time // self.batch_size
+        else:
+            if self.mode == "train":
+                n = n_series // self.batch_size
+            else:
+                n = n_series * n_time // self.batch_size
         if not self.drop_last:
             n += 1
         return n
@@ -168,9 +270,6 @@ class SeriesFrame:
                                                   axis=0)
                     yield self.read_batch(batch_series_idx, enc_time_idx, dec_time_idx)
 
-    def generate(self):
-        time_space = np.arange(0, self.series_len - self.enc_lens - self.dec_lens - self.time_free_space * 2 + 1)
-
     def read_batch(self, batch_series_idx, enc_time_idx, dec_time_idx):
 
         dec_len = dec_time_idx.shape[1]
@@ -186,9 +285,9 @@ class SeriesFrame:
 
         if self.mode != "eval":
             dec_x = self.xy.read_batch(batch_series_idx, dec_time_idx)
-            yield feed_dict, self.check_to_tensor(dec_x).float()
+            return feed_dict, self.check_to_tensor(dec_x).float()
         else:
-            yield feed_dict
+            return feed_dict
 
     def generate_batch(self):
         if self.is_single:
@@ -201,15 +300,23 @@ class SeriesFrame:
 
     def cuda(self):
         self.use_cuda = True
+        return self
 
     def cpu(self):
         self.use_cuda = False
+        return self
 
     def train(self):
         self.mode = 'train'
+        return self
+
+    def valid(self):
+        self.mode = 'valid'
+        return self
 
     def eval(self):
         self.mode = 'eval'
+        return self
 
     def check_to_tensor(self, x):
         if x is None:
