@@ -2,7 +2,7 @@
 # Author: 周知瑞
 # Mail: evilpsycho42@gmail.com
 
-from deepseries.layers import CausalConv1d, TimeDistributedDense1d, Inputs
+from deepseries.nn import CausalConv1d, TimeDistributedDense1d, Inputs
 import torch
 from torch import nn
 from torch.nn import functional as F
