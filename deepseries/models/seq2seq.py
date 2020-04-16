@@ -16,6 +16,7 @@ class BasicSeq2Seq(nn.Module):
         super().__init__()
         self.encoder_input = Inputs(enc_num, enc_cat, dropout=dropout, seq_last=False)
         self.decoder_input = Inputs(dec_num, dec_cat, dropout=dropout, seq_last=False)
+        self.rnn_type = rnn_type
         if rnn_type == "gru":
             rnn = nn.GRU
         elif rnn_type == "lstm":
@@ -33,3 +34,30 @@ class BasicSeq2Seq(nn.Module):
             enc_inputs = torch.cat([enc_x, enc_features], dim=2)
         else:
             enc_inputs = enc_x
+        outputs, hidden = self.encoder(enc_inputs)
+        return outputs, hidden
+
+    def decode(self, enc_outputs, hidden, dec_x, dec_num=None, dec_cat=None):
+        dec_features = self.decoder_input(dec_num, dec_cat)
+        if dec_features is not None:
+            dec_inputs = torch.cat([dec_x, dec_features], dim=2)
+        else:
+            dec_inputs = dec_x
+        outputs, hidden = self.decoder(dec_inputs, hidden=hidden)
+        return outputs, hidden
+
+    def forward(self, enc_x, dec_len, enc_num=None, enc_cat=None, dec_num=None, dec_cat=None):
+        enc_outputs, hidden = self.encode(enc_x, enc_num, enc_cat)
+        step_x = enc_x[:, [-1], :]
+        result = []
+        for step in range(dec_len):
+            step_dec_num = None if dec_num is None else dec_num[:, [step]]
+            step_dec_cat = None if dec_cat is None else dec_cat[:, [step]]
+            step_x, hidden = self.decode(enc_outputs, hidden, step_x, step_dec_num, step_dec_cat)
+            result.append(step_x)
+        return torch.cat(result, dim=1)
+
+    def predict(self, **kw):
+        with torch.no_grad():
+            y_hat = self(**kw)
+        return y_hat

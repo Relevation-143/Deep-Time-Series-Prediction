@@ -57,7 +57,9 @@ class WaveDecoder(nn.Module):
                  skip_channels=32,
                  dilations=[2 ** i for i in range(8)] * 3,
                  kernels_size=[2 for i in range(8)] * 3,
-                 dropout=0.
+                 dropout=0.,
+                 hidden_size=128,
+                 debug=False,
                  ):
         super().__init__()
         self.features_dim = features_dim if features_dim is not None else 0
@@ -67,13 +69,14 @@ class WaveDecoder(nn.Module):
         self.skip_channels = skip_channels
         self.dilations = dilations
         self.kernels_size = kernels_size
+        self.debug = debug
 
         self.fc_h = TimeDistributedDense1d(self.inputs_dim, residual_channels, torch.tanh, dropout=dropout)
         self.fc_c = TimeDistributedDense1d(self.inputs_dim, residual_channels, torch.tanh, dropout=dropout)
         self.cnns = nn.ModuleList(
             [nn.Conv1d(residual_channels, residual_channels * 4, k) for k, d in zip(kernels_size, dilations)])
-        self.fc_out_1 = TimeDistributedDense1d(len(dilations) * skip_channels, 128, F.relu, dropout=dropout)
-        self.fc_out_2 = TimeDistributedDense1d(128, self.source_dim, dropout=dropout)
+        self.fc_out_1 = TimeDistributedDense1d(len(dilations) * skip_channels, hidden_size, F.relu, dropout=dropout)
+        self.fc_out_2 = TimeDistributedDense1d(hidden_size, self.source_dim, dropout=dropout)
 
     def forward(self, x, features, queues):
         inputs = torch.cat([x, features], dim=1) if features is not None else x
@@ -83,18 +86,22 @@ class WaveDecoder(nn.Module):
 
         assert len(queues) == len(self.cnns) == len(self.dilations)
 
+        step_padding = 0
         for state, cnn, dilation in zip(queues, self.cnns, self.dilations):
             update_queues.append(torch.cat([state, h], dim=2))
             state_len = state.shape[2]
             if state_len >= dilation:
                 conv_inputs = torch.cat([state[:, :, [(state_len-1)-(dilation-1)]], h], dim=2)
             else:
+                step_padding += 1
                 conv_inputs = torch.cat([torch.zeros_like(h), h], dim=2)
             conv_outputs = cnn(conv_inputs)
             input_gate, conv_filter, conv_gate, emit_gate = torch.split(conv_outputs, self.residual_channels, dim=1)
             c = torch.sigmoid(input_gate) * c + torch.tanh(conv_filter) * torch.sigmoid(conv_gate)
             h = torch.sigmoid(emit_gate) * torch.tanh(c)
             skips.append(h)
+        if self.debug:
+            print(f"debug info: step padding {step_padding / len(queues) * 100:.0f}%")
 
         # TODO
         # update_queues.pop(-1)
@@ -117,6 +124,8 @@ class WaveNet(nn.Module):
                  dropout=0.,
                  dilations=[2 ** i for i in range(8)] * 3,
                  kernels_size=[2 for i in range(8)] * 3,
+                 hidden_size=128,
+                 debug=False
                  ):
         super().__init__()
         self.source_dim = source_dim
@@ -125,7 +134,9 @@ class WaveNet(nn.Module):
                                skip_channels, dilations, kernels_size, dropout=dropout)
         self.dec_trans = Inputs(dec_numerical, dec_categorical, dropout=dropout)
         self.dec = WaveDecoder(source_dim, self.dec_trans.output_dim, residual_channels,
-                               skip_channels, dilations, kernels_size, dropout=dropout)
+                               skip_channels, dilations, kernels_size, dropout=dropout,
+                               hidden_size=hidden_size, debug=debug)
+        self.debug = debug
 
     def encode(self, x, numerical=None, categorical=None):
         enc_features = self.enc_trans(numerical, categorical)
