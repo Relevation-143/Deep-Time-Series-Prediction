@@ -10,6 +10,7 @@ from torch.utils.tensorboard import SummaryWriter
 from datetime import datetime
 import logging
 import numpy as np
+import time
 
 
 class Learner:
@@ -56,10 +57,11 @@ class Learner:
             bad_epochs = 0
             global_steps = 0
             for epoch in range(1, max_epochs+1):
+                time_start = time.time()
                 self.model.train()
                 train_loss = 0
-                for i, (x, y) in enumerate(train_dl):
-                    loss = self.loss_batch(x, y)
+                for i, (x, y, w) in enumerate(train_dl):
+                    loss = self.loss_batch(x, y, w)
                     writer.add_scalar("Loss/train", loss, global_steps)
                     global_steps += 1
                     train_loss += loss
@@ -68,12 +70,14 @@ class Learner:
                                      f"train loss {train_loss / (i+1):.4f}")
                 valid_loss = 0
                 self.model.eval()
-                for x, y in valid_dl:
-                    loss = self.eval_batch(x, y)
+                for x, y, w in valid_dl:
+                    loss = self.eval_batch(x, y, w)
                     valid_loss += loss / len(valid_dl)
                 writer.add_scalar("Loss/valid", valid_loss, global_steps)
+                epoch_use_time = (time.time() - time_start) / 60
                 logging.info(f"epoch {epoch} / {max_epochs}, batch 100%, "
-                             f"train loss {train_loss / len(train_dl):.4f}, valid loss {valid_loss:.4f}")
+                             f"train loss {train_loss / len(train_dl):.4f}, valid loss {valid_loss:.4f}, "
+                             f"cost time {epoch_use_time:.1f} minute")
 
                 self.losses.append(valid_loss)
 
@@ -95,25 +99,25 @@ class Learner:
                 self.epochs += 1
             logging.info(f"training finished, best epoch {np.argmin(self.losses)}, best valid loss {best_score:.4f}")
 
-    def loss_batch(self, x, y):
+    def loss_batch(self, x, y, w):
         self.optimizer.zero_grad()
         if isinstance(x, dict):
             y_hat = self.model(**x)
         else:
             y_hat = self.model(*x)
-        loss = self.loss_fn(y_hat, y)  # / y.shape[0]  # add gradient normalize
+        loss = self.loss_fn(y_hat, y, w)  # / y.shape[0]  # add gradient normalize
         loss.backward()
         torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.grad_clip)
         self.optimizer.step()
         return loss.item()
 
-    def eval_batch(self, x, y):
+    def eval_batch(self, x, y, w):
         with torch.no_grad():
             if isinstance(x, dict):
                 y_hat = self.model(**x)
             else:
                 y_hat = self.model(*x)
-            loss = self.loss_fn(y, y_hat)  # / y.shape[0]  # add gradient normalize
+            loss = self.loss_fn(y, y_hat, w)  # / y.shape[0]  # add gradient normalize
         return loss.item()
 
     def load(self, model_checkpoint_path):

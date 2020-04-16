@@ -31,7 +31,7 @@ class WaveEncoder(nn.Module):
         self.fc_c = TimeDistributedDense1d(self.inputs_dim, residual_channels, torch.tanh, dropout=dropout)
         self.cnns = nn.ModuleList(
             [CausalConv1d(residual_channels, residual_channels * 4, k, dilation=d)
-             for k, d in zip(kernels_size[:-1], dilations[:-1])])  # TODO
+             for k, d in zip(kernels_size, dilations)])  # TODO
 
     def forward(self, x, features=None):
         inputs = torch.cat([x, features], dim=1) if features is not None else x
@@ -39,7 +39,7 @@ class WaveEncoder(nn.Module):
         c = self.fc_c(inputs)
         # TODO
         states = [h]
-        for cnn in self.cnns:
+        for cnn in self.cnns[:-1]:
             dilation_inputs = cnn(h)
             input_gate, conv_filter, conv_gate, emit_gate = torch.split(dilation_inputs, self.residual_channels, dim=1)
             c = torch.sigmoid(input_gate) * c + torch.tanh(conv_filter) * torch.sigmoid(conv_gate)
@@ -81,7 +81,10 @@ class WaveDecoder(nn.Module):
         c = self.fc_c(inputs)
         skips, update_queues = [], []  # TODO
 
+        assert len(queues) == len(self.cnns) == len(self.dilations)
+
         for state, cnn, dilation in zip(queues, self.cnns, self.dilations):
+            update_queues.append(torch.cat([state, h], dim=2))
             state_len = state.shape[2]
             if state_len >= dilation:
                 conv_inputs = torch.cat([state[:, :, [(state_len-1)-(dilation-1)]], h], dim=2)
@@ -92,7 +95,7 @@ class WaveDecoder(nn.Module):
             c = torch.sigmoid(input_gate) * c + torch.tanh(conv_filter) * torch.sigmoid(conv_gate)
             h = torch.sigmoid(emit_gate) * torch.tanh(c)
             skips.append(h)
-            update_queues.append(torch.cat([state, h], dim=2))
+
         # TODO
         # update_queues.pop(-1)
         skips = torch.cat(skips, dim=1)
