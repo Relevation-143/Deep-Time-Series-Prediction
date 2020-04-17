@@ -11,17 +11,17 @@ from datetime import datetime
 import logging
 import numpy as np
 import time
+import copy
 
 
 class Learner:
 
-    def __init__(self, model, optimizer, loss_fn, root_dir, log_interval=4, lr_scheduler=None, grad_clip=5):
+    def __init__(self, model, optimizer, loss_fn, root_dir, verbose=4, lr_scheduler=None, grad_clip=5):
         self.model = model
         self.optimizer = optimizer
         self.loss_fn = loss_fn
         self.lr_scheduler = lr_scheduler
         self.grad_clip = grad_clip
-
         self.root_dir = root_dir
         self.log_dir = os.path.join(root_dir, 'logs')
         self.model_dir = os.path.join(root_dir, 'checkpoints')
@@ -29,9 +29,13 @@ class Learner:
             if not os.path.exists(i):
                 os.mkdir(i)
         self.epochs = 0
+        self.best_epoch = -1
+        self.best_loss = np.inf
+        self.global_steps = 0
+        self.use_patient = 0
         self.losses = []
         self.init_logging()
-        self.log_interval = log_interval
+        self.verbose = verbose
 
     def init_logging(self):
 
@@ -41,63 +45,68 @@ class Learner:
         date_str = datetime.now().strftime('%Y-%m-%d_%H-%M')
         log_file = 'log_{}.txt'.format(date_str)
         logging.basicConfig(
-            filename=os.path.join(self.log_dir, log_file),
+            # filename=os.path.join(self.log_dir, log_file),
             level=logging.INFO,
             format='[[%(asctime)s]] %(message)s',
             datefmt='%m/%d/%Y %I:%M:%S %p'
         )
-        logging.getLogger().addHandler(logging.StreamHandler())
+        # logging.getLogger().addHandler(logging.StreamHandler())
+        logger = logging.getLogger("deepseries.learner")
+        if len(logger.handlers) < 1:
+            logging.getLogger("deepseries.learner").addHandler(logging.StreamHandler())
 
     def fit(self, max_epochs, train_dl, valid_dl, early_stopping=True, patient=10, start_save=-1):
         with SummaryWriter(self.log_dir) as writer:
             # writer.add_graph(self.model)
             logging.info(f"start training >>>>>>>>>>>  "
                          f"see log: tensorboard --logdir {self.log_dir}")
-            best_score = np.inf
-            bad_epochs = 0
-            global_steps = 0
-            for epoch in range(1, max_epochs+1):
+            start_epoch = copy.copy(self.epochs)
+            for i in range(max_epochs):
+                self.epochs += 1
                 time_start = time.time()
                 self.model.train()
                 train_loss = 0
                 for i, (x, y, w) in enumerate(train_dl):
                     loss = self.loss_batch(x, y, w)
-                    writer.add_scalar("Loss/train", loss, global_steps)
-                    global_steps += 1
+                    writer.add_scalar("Loss/train", loss, self.global_steps)
+                    self.global_steps += 1
                     train_loss += loss
-                    if global_steps % self.log_interval == 0:
-                        logging.info(f"epoch {epoch} / {max_epochs}, batch {i/len(train_dl)*100:3.0f}%, "
+                    if self.verbose > 0 and self.global_steps % self.verbose == 0:
+                        logging.info(f"epoch {self.epochs} / {max_epochs+start_epoch}, "
+                                     f"batch {i/len(train_dl)*100:3.0f}%, "
                                      f"train loss {train_loss / (i+1):.4f}")
                 valid_loss = 0
                 self.model.eval()
                 for x, y, w in valid_dl:
                     loss = self.eval_batch(x, y, w)
                     valid_loss += loss / len(valid_dl)
-                writer.add_scalar("Loss/valid", valid_loss, global_steps)
+                writer.add_scalar("Loss/valid", valid_loss, self.global_steps)
                 epoch_use_time = (time.time() - time_start) / 60
-                logging.info(f"epoch {epoch} / {max_epochs}, batch 100%, "
+                logging.info(f"epoch {self.epochs} / {max_epochs+self.epochs}, batch 100%, "
                              f"train loss {train_loss / len(train_dl):.4f}, valid loss {valid_loss:.4f}, "
                              f"cost time {epoch_use_time:.1f} minute")
 
                 self.losses.append(valid_loss)
 
-                if epoch >= start_save:
+                if self.epochs >= start_save:
                     self.save()
+
                 if early_stopping:
                     if self.epochs > 1:
-                        if valid_loss > best_score:
-                            bad_epochs += 1
+                        if valid_loss > self.best_loss:
+                            self.use_patient += 1
                         else:
-                            bad_epochs = 0
-                        if bad_epochs >= patient:
-                            print("early stopping!")
+                            self.use_patient = 0
+                        if self.use_patient >= patient:
+                            logging.info("early stopping!")
                             break
-                best_score = min(self.losses)
+                if valid_loss <= self.best_loss:
+                    self.best_loss = valid_loss
+                    self.best_epoch = self.epochs
                 if self.lr_scheduler is not None:
                     self.lr_scheduler.step()
-                writer.add_scalar('lr', self.optimizer.param_groups[0]['lr'], global_steps)
-                self.epochs += 1
-            logging.info(f"training finished, best epoch {np.argmin(self.losses)}, best valid loss {best_score:.4f}")
+                writer.add_scalar('lr', self.optimizer.param_groups[0]['lr'], self.global_steps)
+            logging.info(f"training finished, best epoch {self.best_epoch}, best valid loss {self.best_loss:.4f}")
 
     def loss_batch(self, x, y, w):
         self.optimizer.zero_grad()
@@ -120,12 +129,19 @@ class Learner:
             loss = self.loss_fn(y, y_hat, w)  # / y.shape[0]  # add gradient normalize
         return loss.item()
 
-    def load(self, model_checkpoint_path):
-        checkpoint = torch.load(model_checkpoint_path)
+    def load(self, epoch, checkpoint_dir=None):
+        if checkpoint_dir is None:
+            checkpoint_dir = self.model_dir
+        checkpoint = torch.load(os.path.join(checkpoint_dir, f"model-epoch-{epoch}.pkl"))
         self.model.load_state_dict(checkpoint['model'])
         self.optimizer.load_state_dict(checkpoint['optimizer'])
         self.epochs = checkpoint['epochs']
         self.lr_scheduler = checkpoint['lr_scheduler']
+        self.epochs = epoch
+        self.losses = checkpoint['losses']
+        self.best_loss = checkpoint['best_loss']
+        self.best_epoch = checkpoint['best_epoch']
+        self.global_steps = checkpoint['global_steps']
 
     def save(self):
         checkpoint = {
@@ -133,6 +149,11 @@ class Learner:
             "optimizer": self.optimizer.state_dict(),
             "epochs": self.epochs,
             'lr_scheduler': self.lr_scheduler,
+            'losses': self.losses,
+            'best_loss': self.best_loss,
+            'best_epoch': self.best_epoch,
+            'use_patient': self.use_patient,
+            'global_steps': self.global_steps,
         }
 
         name = f"model-epoch-{self.epochs}.pkl"

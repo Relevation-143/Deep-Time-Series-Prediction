@@ -168,9 +168,9 @@ class Seq2SeqDataLoader:
         feed_dict = {
             "enc_x": self.check_to_tensor(enc_x).float(),
             "enc_num": self.check_to_tensor(self.enc_num_feats.read_batch(batch_series_idx, enc_time_idx)).float(),
-            "enc_cat": self.check_to_tensor(self.enc_cat_feats.read_batch(batch_series_idx, enc_time_idx)),
+            "enc_cat": self.check_to_tensor(self.enc_cat_feats.read_batch(batch_series_idx, enc_time_idx)).long(),
             "dec_num": self.check_to_tensor(self.dec_num_feats.read_batch(batch_series_idx, dec_time_idx)).float(),
-            "dec_cat": self.check_to_tensor(self.dec_cat_feats.read_batch(batch_series_idx, dec_time_idx)),
+            "dec_cat": self.check_to_tensor(self.dec_cat_feats.read_batch(batch_series_idx, dec_time_idx)).long(),
             "dec_len": dec_len
         }
 
