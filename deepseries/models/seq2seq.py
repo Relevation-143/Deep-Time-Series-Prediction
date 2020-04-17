@@ -11,7 +11,7 @@ from deepseries.nn.comm import Inputs
 
 class BasicSeq2Seq(nn.Module):
 
-    def __init__(self, xy_dim, hidden_dim, dropout=0.5, enc_num=None,
+    def __init__(self, source_dim, hidden_dim, dropout=0.5, enc_num=None,
                  enc_cat=None, dec_num=None, dec_cat=None, rnn_type='gru', n_layers=1):
         super().__init__()
         self.encoder_input = Inputs(enc_num, enc_cat, dropout=dropout, seq_last=False)
@@ -23,10 +23,12 @@ class BasicSeq2Seq(nn.Module):
             rnn = nn.LSTM
         elif rnn_type == "rnn":
             rnn = nn.RNN
-        self.encoder = rnn(self.encoder_input.output_dim + xy_dim, hidden_dim, num_layers=n_layers,
+        self.encoder = rnn(self.encoder_input.output_dim + source_dim, hidden_dim, num_layers=n_layers,
                            dropout=dropout, batch_first=True)
-        self.decoder = rnn(self.encoder_input.output_dim + xy_dim, hidden_dim, num_layers=n_layers,
+        self.decoder = rnn(self.encoder_input.output_dim + source_dim, hidden_dim, num_layers=n_layers,
                            dropout=dropout, batch_first=True)
+        self.fc_out_1 = nn.Linear(hidden_dim, hidden_dim)
+        self.fc_out_2 = nn.Linear(hidden_dim, source_dim)
 
     def encode(self, enc_x, enc_num=None, enc_cat=None):
         enc_features = self.encoder_input(enc_num, enc_cat)
@@ -43,7 +45,9 @@ class BasicSeq2Seq(nn.Module):
             dec_inputs = torch.cat([dec_x, dec_features], dim=2)
         else:
             dec_inputs = dec_x
-        outputs, hidden = self.decoder(dec_inputs, hidden=hidden)
+        outputs, hidden = self.decoder(dec_inputs, hidden)
+        outputs = torch.relu(self.fc_out_1(outputs))
+        outputs = self.fc_out_2(outputs)
         return outputs, hidden
 
     def forward(self, enc_x, dec_len, enc_num=None, enc_cat=None, dec_num=None, dec_cat=None):

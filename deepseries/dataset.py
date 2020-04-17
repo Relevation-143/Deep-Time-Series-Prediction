@@ -21,16 +21,15 @@ class TimeSeries:
         """
         assert isinstance(values, np.ndarray)
         assert len(values.shape) == 3
-        self.n = values.shape[0]
-        self.dim = values.shape[1]
         self.values = values
         self.idx_map = idx_map
 
-    def read_batch(self, series_idx, time_idx):
+    def read_batch(self, series_idx, time_idx, seq_last):
         """
         Args:
             series_idx: shape(I)
             time_idx: shape(J, seq)
+            seq_last(bool)
 
         Returns:
             shape(batch, dim, seq)
@@ -39,7 +38,12 @@ class TimeSeries:
             series_idx = np.array([self.idx_map[i] for i in series_idx])
         batch_size = series_idx.shape[0] * time_idx.shape[0]
         seq_len = time_idx.shape[1]
-        batch = self.values[series_idx][:, :, time_idx].transpose(0, 2, 1, 3).reshape(batch_size, self.dim, seq_len)
+        if seq_last:
+            dim = self.values.shape[1]
+            batch = self.values[series_idx][:, :, time_idx].transpose(0, 2, 1, 3).reshape(batch_size, dim, seq_len)
+        else:
+            dim = self.values.shape[2]
+            batch = self.values[series_idx][:, time_idx].reshape(batch_size, seq_len, dim)
         return batch
 
 
@@ -55,19 +59,23 @@ class Property:
         self.values = values
         self.idx_map = idx_map
 
-    def read_batch(self, series_idx, time_idx):
+    def read_batch(self, series_idx, time_idx, seq_last):
         """
 
         Args:
             series_idx: shape(J)
             time_idx: (I, seq)
+            seq_last(bool)
 
         Returns:
             shape(N, dim, seq)
         """
         if self.idx_map is not None:
             series_idx = np.array([self.idx_map[i] for i in series_idx])
-        batch = np.repeat(np.expand_dims(self.values[series_idx], axis=2), time_idx.shape[1], axis=2)
+        if seq_last:
+            batch = np.repeat(np.expand_dims(self.values[series_idx], axis=2), time_idx.shape[1], axis=2)
+        else:
+            batch = np.repeat(np.expand_dims(self.values[series_idx], axis=1), time_idx.shape[1], axis=1)
         return batch
 
 
@@ -76,27 +84,29 @@ class FeatureStore:
     def __init__(self, features=None):
         self.features = features
 
-    def read_batch(self, series_idx, time_idx):
+    def read_batch(self, series_idx, time_idx, seq_last):
         if self.features is None:
             return None
         else:
-            batch = np.concatenate([f.read_batch(series_idx, time_idx) for f in self.features], axis=1)
+            batch = np.concatenate([f.read_batch(series_idx, time_idx, seq_last) for f in self.features], axis=1)
             return batch
 
 
 class Seq2SeqDataLoader:
 
     def __init__(self, xy, batch_size, enc_lens, dec_lens, use_cuda=False, weight=None,
-                 time_free_space=0, time_interval=1, mode="train", drop_last=False,
+                 time_free_space=0, time_interval=1, mode="train", drop_last=False, seq_last=True,
                  enc_num_feats=None, dec_num_feats=None, enc_cat_feats=None, dec_cat_feats=None, random_seed=42):
         self.xy = xy
         self.series_size = xy.values.shape[0]
         self.series_idx = np.arange(xy.values.shape[0])
-        self.time_size = xy.values.shape[2]
-        self.time_idx = np.arange(xy.values.shape[2])
+        self.time_dim = 2 if seq_last else 1
+        self.time_size = xy.values.shape[self.time_dim]
+        self.time_idx = np.arange(xy.values.shape[self.time_dim])
         self.batch_size = batch_size
         self.enc_lens = enc_lens
         self.dec_lens = dec_lens
+        self.seq_last = seq_last
 
         self.use_cuda = use_cuda
         self._time_free_space = time_free_space
@@ -164,23 +174,27 @@ class Seq2SeqDataLoader:
     def read_batch(self, batch_series_idx, enc_time_idx, dec_time_idx):
 
         dec_len = dec_time_idx.shape[1]
-        enc_x = self.xy.read_batch(batch_series_idx, enc_time_idx)
+        enc_x = self.xy.read_batch(batch_series_idx, enc_time_idx, self.seq_last)
         feed_dict = {
-            "enc_x": self.check_to_tensor(enc_x).float(),
-            "enc_num": self.check_to_tensor(self.enc_num_feats.read_batch(batch_series_idx, enc_time_idx)).float(),
-            "enc_cat": self.check_to_tensor(self.enc_cat_feats.read_batch(batch_series_idx, enc_time_idx)).long(),
-            "dec_num": self.check_to_tensor(self.dec_num_feats.read_batch(batch_series_idx, dec_time_idx)).float(),
-            "dec_cat": self.check_to_tensor(self.dec_cat_feats.read_batch(batch_series_idx, dec_time_idx)).long(),
+            "enc_x": self.check_to_tensor(enc_x, 'float32'),
+            "enc_num": self.check_to_tensor(
+                self.enc_num_feats.read_batch(batch_series_idx, enc_time_idx, self.seq_last), 'float32'),
+            "enc_cat": self.check_to_tensor(
+                self.enc_cat_feats.read_batch(batch_series_idx, enc_time_idx, self.seq_last), 'int64'),
+            "dec_num": self.check_to_tensor(
+                self.dec_num_feats.read_batch(batch_series_idx, dec_time_idx, self.seq_last), 'float32'),
+            "dec_cat": self.check_to_tensor(
+                self.dec_cat_feats.read_batch(batch_series_idx, dec_time_idx, self.seq_last), 'int64'),
             "dec_len": dec_len
         }
 
         if self.mode != "test":
-            dec_x = self.xy.read_batch(batch_series_idx, dec_time_idx)
+            dec_x = self.xy.read_batch(batch_series_idx, dec_time_idx, self.seq_last)
             if self.weight is not None:
-                weight = self.weight.read_batch(batch_series_idx, dec_time_idx)
-                return feed_dict, self.check_to_tensor(dec_x).float(), self.check_to_tensor(weight).float()
+                weight = self.weight.read_batch(batch_series_idx, dec_time_idx, self.seq_last)
+                return feed_dict, self.check_to_tensor(dec_x, 'float32'), self.check_to_tensor(weight, 'float32')
             else:
-                return feed_dict, self.check_to_tensor(dec_x).float(), None
+                return feed_dict, self.check_to_tensor(dec_x, 'float32').float(), None
         else:
             return feed_dict
 
@@ -204,13 +218,17 @@ class Seq2SeqDataLoader:
         self.mode = 'test'
         return self
 
-    def check_to_tensor(self, x):
+    def check_to_tensor(self, x, dtype):
         if x is None:
             return x
+        x = torch.as_tensor(x)
+        if dtype == 'float32':
+            x = x.float()
+        elif dtype == 'int64':
+            x = x.long()
         if self.use_cuda:
-            return torch.as_tensor(x).cuda()
-        else:
-            return torch.as_tensor(x)
+            x = x.cuda()
+        return x
 
 
 # class SeriesFrame:

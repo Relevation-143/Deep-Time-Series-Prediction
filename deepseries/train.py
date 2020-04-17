@@ -66,15 +66,15 @@ class Learner:
                 time_start = time.time()
                 self.model.train()
                 train_loss = 0
-                for i, (x, y, w) in enumerate(train_dl):
+                for j, (x, y, w) in enumerate(train_dl):
                     loss = self.loss_batch(x, y, w)
                     writer.add_scalar("Loss/train", loss, self.global_steps)
                     self.global_steps += 1
                     train_loss += loss
                     if self.verbose > 0 and self.global_steps % self.verbose == 0:
                         logging.info(f"epoch {self.epochs} / {max_epochs+start_epoch}, "
-                                     f"batch {i/len(train_dl)*100:3.0f}%, "
-                                     f"train loss {train_loss / (i+1):.4f}")
+                                     f"batch {j/len(train_dl)*100:3.0f}%, "
+                                     f"train loss {train_loss / (j+1):.4f}")
                 valid_loss = 0
                 self.model.eval()
                 for x, y, w in valid_dl:
@@ -82,11 +82,12 @@ class Learner:
                     valid_loss += loss / len(valid_dl)
                 writer.add_scalar("Loss/valid", valid_loss, self.global_steps)
                 epoch_use_time = (time.time() - time_start) / 60
-                logging.info(f"epoch {self.epochs} / {max_epochs+self.epochs}, batch 100%, "
+                logging.info(f"epoch {self.epochs} / {max_epochs+start_epoch}, batch 100%, "
                              f"train loss {train_loss / len(train_dl):.4f}, valid loss {valid_loss:.4f}, "
                              f"cost time {epoch_use_time:.1f} minute")
 
                 self.losses.append(valid_loss)
+                writer.add_scalar('lr', self.optimizer.param_groups[0]['lr'], self.global_steps)
 
                 if self.epochs >= start_save:
                     self.save()
@@ -105,7 +106,7 @@ class Learner:
                     self.best_epoch = self.epochs
                 if self.lr_scheduler is not None:
                     self.lr_scheduler.step()
-                writer.add_scalar('lr', self.optimizer.param_groups[0]['lr'], self.global_steps)
+
             logging.info(f"training finished, best epoch {self.best_epoch}, best valid loss {self.best_loss:.4f}")
 
     def loss_batch(self, x, y, w):
