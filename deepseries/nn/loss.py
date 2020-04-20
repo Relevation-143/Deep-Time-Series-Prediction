@@ -6,9 +6,8 @@
 """
 import torch
 from torch.nn import functional as F
-torch.optim.lr_scheduler.CosineAnnealingWarmRestarts
 
-0.995 ** 500
+
 class MSELoss:
 
     def __call__(self, input, target, weight=None):

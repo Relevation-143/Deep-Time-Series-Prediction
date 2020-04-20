@@ -38,7 +38,6 @@ class Learner:
         self.verbose = verbose
 
     def init_logging(self):
-
         # exist_logger = logging.Logger.manager.loggerDict()
         # if 'deepseries' not in exist_logger:
 
@@ -48,7 +47,7 @@ class Learner:
             # filename=os.path.join(self.log_dir, log_file),
             level=logging.INFO,
             format='[[%(asctime)s]] %(message)s',
-            datefmt='%m/%d/%Y %I:%M:%S %p'
+            datefmt='%m/%d/%Y %H:%M:%S'
         )
         # logging.getLogger().addHandler(logging.StreamHandler())
         logger = logging.getLogger("deepseries.learner")
@@ -84,7 +83,7 @@ class Learner:
                 epoch_use_time = (time.time() - time_start) / 60
                 logging.info(f"epoch {self.epochs} / {max_epochs+start_epoch}, batch 100%, "
                              f"train loss {train_loss / len(train_dl):.4f}, valid loss {valid_loss:.4f}, "
-                             f"cost time {epoch_use_time:.1f} minute")
+                             f"cost {epoch_use_time:.1f} min")
 
                 self.losses.append(valid_loss)
                 writer.add_scalar('lr', self.optimizer.param_groups[0]['lr'], self.global_steps)
