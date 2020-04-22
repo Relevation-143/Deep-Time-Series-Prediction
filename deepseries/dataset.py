@@ -5,7 +5,6 @@
 @time   : 2020/4/3 14:33
 """
 import torch
-from torch.optim import Adam
 import copy
 import numpy as np
 
@@ -94,7 +93,7 @@ class FeatureStore:
 
 class Seq2SeqDataLoader:
 
-    def __init__(self, xy, batch_size, enc_lens, dec_lens, use_cuda=False, weight=None,
+    def __init__(self, xy, batch_size, enc_lens, dec_lens, use_cuda=False, weights=None,
                  time_free_space=0, time_interval=1, mode="train", drop_last=False, seq_last=True,
                  enc_num_feats=None, dec_num_feats=None, enc_cat_feats=None, dec_cat_feats=None, random_seed=42):
         self.xy = xy
@@ -114,12 +113,11 @@ class Seq2SeqDataLoader:
         self.mode = mode
         self.drop_last = drop_last
 
-        self.weight = FeatureStore([weight]) if weight is not None else None
+        self.weights = FeatureStore([weights]) if weights is not None else None
         self.enc_num_feats = FeatureStore(enc_num_feats)
         self.dec_num_feats = FeatureStore(dec_num_feats)
         self.enc_cat_feats = FeatureStore(enc_cat_feats)
         self.dec_cat_feats = FeatureStore(dec_cat_feats)
-
         self.random = np.random.RandomState(random_seed)
 
     @property
@@ -138,7 +136,11 @@ class Seq2SeqDataLoader:
     def __len__(self):
         """ return num batch in one epoch"""
         if self.series_size == 1:
-            return len(self.val_time_start_idx) // self.batch_size + 1 if not self.drop_last else 0
+            size = len(self.val_time_start_idx) // self.batch_size
+            if len(size) % self.batch_size == 0 or self.drop_last:
+                return size // self.batch_size
+            else:
+                return size // self.batch_size + 1
         else:
             if self.drop_last or self.series_size % self.batch_size == 0:
                 return self.series_size // self.batch_size
@@ -193,9 +195,9 @@ class Seq2SeqDataLoader:
 
         if self.mode != "test":
             dec_x = self.xy.read_batch(batch_series_idx, dec_time_idx, self.seq_last)
-            if self.weight is not None:
-                weight = self.weight.read_batch(batch_series_idx, dec_time_idx, self.seq_last)
-                return feed_dict, self.check_to_tensor(dec_x, 'float32'), self.check_to_tensor(weight, 'float32')
+            if self.weights is not None:
+                weights = self.weights.read_batch(batch_series_idx, dec_time_idx, self.seq_last)
+                return feed_dict, self.check_to_tensor(dec_x, 'float32'), self.check_to_tensor(weights, 'float32')
             else:
                 return feed_dict, self.check_to_tensor(dec_x, 'float32').float(), None
         else:
@@ -232,3 +234,11 @@ class Seq2SeqDataLoader:
         if self.use_cuda:
             x = x.cuda()
         return x
+
+
+def forward_split(time_idx, enc_len, dec_len, valid_size):
+    if valid_size < 1:
+        valid_size = int(len(time_idx) * valid_size)
+    valid_idx = time_idx[-(valid_size + enc_len + dec_len):]
+    train_idx = time_idx[:-valid_size]
+    return train_idx, valid_idx

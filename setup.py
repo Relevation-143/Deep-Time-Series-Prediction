@@ -18,5 +18,5 @@ setup(
     license="Apache 2.0",
     url='https://github.com/EvilPsyCHo/Deep-Time-Series-Prediction',
     packages={'deepseries', 'deepseries.nn', 'deepseries.models'},
-    package_data={'deepseries': ['dataset/*.csv']},
+    # package_data={'deepseries': ['dataset/*.csv']},
 )
