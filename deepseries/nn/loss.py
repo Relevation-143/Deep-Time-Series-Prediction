@@ -15,7 +15,7 @@ class MSELoss:
             return F.mse_loss(input, target, reduction='mean')
         else:
             ret = F.mse_loss(input, target, reduction='none')
-            loss = torch.mean(ret * weight.expand_as(ret))
+            loss = torch.mean(ret * weight)
             return loss
 
 
@@ -26,5 +26,5 @@ class RMSELoss:
             return torch.sqrt(F.mse_loss(input, target, reduction='mean'))
         else:
             ret = F.mse_loss(input, target, reduction='none')
-            loss = torch.sqrt(torch.mean(ret * weight.expand_as(ret)) * 1e-6)
+            loss = torch.sqrt(torch.mean(ret * weight))
             return loss
