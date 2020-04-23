@@ -87,10 +87,10 @@ class WaveDecoder(nn.Module):
         c = self.fc_c(inputs)
         skips, update_queues = [], []  # TODO
 
-        assert len(queues) == len(self.cnns) == len(self.dilations)
-
         step_padding = 0
-        for state, cnn, dilation in zip(queues, self.cnns, self.dilations):
+        dilations = [2 ** d for _ in range(self.n_blocks) for d in range(self.n_layers)]
+
+        for state, cnn, dilation in zip(queues, self.cnns, dilations):
             update_queues.append(torch.cat([state, h], dim=2))
             state_len = state.shape[2]
             if state_len >= dilation:

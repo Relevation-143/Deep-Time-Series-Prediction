@@ -25,7 +25,7 @@ class BasicSeq2Seq(nn.Module):
             rnn = nn.RNN
         self.encoder = rnn(self.encoder_input.output_dim + series_dim, hidden_dim, num_layers=n_layers,
                            dropout=dropout, batch_first=True)
-        self.decoder = rnn(self.encoder_input.output_dim + series_dim, hidden_dim, num_layers=n_layers,
+        self.decoder = rnn(self.decoder_input.output_dim + series_dim, hidden_dim, num_layers=n_layers,
                            dropout=dropout, batch_first=True)
         self.fc_out_1 = nn.Linear(hidden_dim, hidden_dim)
         self.fc_out_2 = nn.Linear(hidden_dim, series_dim)
