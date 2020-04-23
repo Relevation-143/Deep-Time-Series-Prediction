@@ -53,7 +53,7 @@ class WaveEncoder(nn.Module):
 class WaveDecoder(nn.Module):
 
     def __init__(self,
-                 source_dim=1,
+                 series_dim=1,
                  features_dim=None,
                  residual_channels=32,
                  skip_channels=32,
@@ -65,8 +65,8 @@ class WaveDecoder(nn.Module):
                  ):
         super().__init__()
         self.features_dim = features_dim if features_dim is not None else 0
-        self.source_dim = source_dim
-        self.inputs_dim = self.features_dim + source_dim
+        self.series_dim = series_dim
+        self.inputs_dim = self.features_dim + series_dim
         self.residual_channels = residual_channels
         self.skip_channels = skip_channels
         self.n_blocks = n_blocks
@@ -79,7 +79,7 @@ class WaveDecoder(nn.Module):
             [nn.Conv1d(residual_channels, residual_channels * 4, kernel_size=2)
              for _ in range(n_blocks) for layer in range(n_layers)])
         self.fc_out_1 = TimeDistributedDense1d(n_layers * n_blocks * skip_channels, hidden_size, F.relu, dropout=dropout)
-        self.fc_out_2 = TimeDistributedDense1d(hidden_size, self.source_dim, dropout=dropout)
+        self.fc_out_2 = TimeDistributedDense1d(hidden_size, self.series_dim, dropout=dropout)
 
     def forward(self, x, features, queues):
         inputs = torch.cat([x, features], dim=1) if features is not None else x
@@ -126,7 +126,7 @@ class Wave2WaveV1(nn.Module):
                  skip_channels=32,
                  dropout=0.,
                  n_blocks=3,
-                 n_layers=3,
+                 n_layers=8,
                  hidden_size=128,
                  debug=False
                  ):

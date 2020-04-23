@@ -87,7 +87,10 @@ class FeatureStore:
         if self.features is None:
             return None
         else:
-            batch = np.concatenate([f.read_batch(series_idx, time_idx, seq_last) for f in self.features], axis=1)
+            if seq_last:
+                batch = np.concatenate([f.read_batch(series_idx, time_idx, seq_last) for f in self.features], axis=1)
+            else:
+                batch = np.concatenate([f.read_batch(series_idx, time_idx, seq_last) for f in self.features], axis=2)
             return batch
 
 
