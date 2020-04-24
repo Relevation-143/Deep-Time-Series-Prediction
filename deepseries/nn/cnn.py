@@ -4,6 +4,7 @@
 
 from torch import nn
 from torch.nn import functional as F
+from torch.nn import LayerNorm
 
 class CausalConv1d(nn.Conv1d):
     """1D Causal Convolution Layer

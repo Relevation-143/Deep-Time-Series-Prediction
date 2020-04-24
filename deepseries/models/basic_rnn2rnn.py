@@ -23,6 +23,7 @@ class BasicSeq2Seq(nn.Module):
             rnn = nn.LSTM
         elif rnn_type == "rnn":
             rnn = nn.RNN
+
         self.encoder = rnn(self.encoder_input.output_dim + series_dim, hidden_dim, num_layers=n_layers,
                            dropout=dropout, batch_first=True)
         self.decoder = rnn(self.decoder_input.output_dim + series_dim, hidden_dim, num_layers=n_layers,
@@ -36,6 +37,8 @@ class BasicSeq2Seq(nn.Module):
             enc_inputs = torch.cat([enc_x, enc_features], dim=2)
         else:
             enc_inputs = enc_x
+        # if self.bn is not None:
+        #     enc_inputs = self.bn(enc_inputs.transpose(1, 2)).transpose(2, 1)
         outputs, hidden = self.encoder(enc_inputs)
         return outputs, hidden
 
