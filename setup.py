@@ -11,7 +11,7 @@ from setuptools import setup
 
 setup(
     name='deepseries',
-    version='0.4.1',
+    version='0.4.3',
     description='deep learning library for time series prediction.',
     author='zhirui zhou',
     author_email='evilpsycho42@gmail.com',

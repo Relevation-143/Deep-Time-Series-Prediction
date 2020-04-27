@@ -158,3 +158,15 @@ class Learner:
 
         name = f"model-epoch-{self.epochs}.pkl"
         torch.save(checkpoint, os.path.join(self.model_dir, name))
+
+
+class HyperParameters(dict):
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    def __getattr__(self, item):
+        return self.get(item)
+
+    def __setattr__(self, key, value):
+        self[key] = value

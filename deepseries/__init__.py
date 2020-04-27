@@ -2,4 +2,4 @@
 # Author: 周知瑞
 # Mail: evilpsycho42@gmail.com
 
-__version__ = '0.4.1'
+__version__ = '0.4.3'
