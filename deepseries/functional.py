@@ -74,7 +74,7 @@ def batch_autocorr(data, lags, starts, ends, threshold, backoffset=0, use_smooth
             axis=1)
     else:
         if lags < 3:
-            use_smooth=False
+            use_smooth = False
         n_series = data.shape[0]
         n_days = data.shape[1]
         max_end = n_days - backoffset
