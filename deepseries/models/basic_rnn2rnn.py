@@ -68,3 +68,10 @@ class BasicSeq2Seq(nn.Module):
         with torch.no_grad():
             y_hat = self(**kw)
         return y_hat
+
+
+net = BasicSeq2Seq(1, 12, enc_cat=[(12, 2)])
+net = net.apply(lambda x: print(x))
+
+
+net2 = nn.Embedding(10, 10)
