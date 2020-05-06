@@ -8,6 +8,18 @@ import torch
 from torch import nn
 
 
+class Dense(nn.Module):
+
+    def __init__(self, in_features, out_features, bias=True, dropout=0., activation=None):
+        super().__init__()
+        self.fc = nn.Linear(in_features, out_features, bias=bias)
+        self.dropout = nn.Dropout(dropout)
+        self.activation = getattr(nn, activation)() if activation else None
+
+    def forward(self, x):
+        outputs = self.dropout(self.fc(x))
+
+
 class Embeddings(nn.Module):
 
     def __init__(self, embeds_dim, seq_last=True):
@@ -50,6 +62,32 @@ class Inputs(nn.Module):
             concat.append(num)
         if self.cat_features is not None:
             concat.append(self.embeddings(cat))
+        concat = torch.cat(concat, dim=1 if self.seq_last else 2)
+        return concat
+
+
+class InputsEXP(nn.Module):
+
+    def __init__(self, num_feat=None, cat_feat=None, batch_norm=False, seq_last=True):
+        super().__init__()
+        self.num_feat = num_feat
+        self.cat_feat = cat_feat
+        self.num_dim = 0 if num_feat is None else num_feat
+        self.cat_dim = 0 if cat_feat is None else sum([i for _, i in cat_feat])
+        self.output_dim = self.num_dim + self.cat_dim
+
+        self.embeddings = Embeddings(cat_feat, seq_last) if cat_feat else None
+        self.batch_norm = nn.BatchNorm1d(self.output_dim) if batch_norm else None
+        self.seq_last = seq_last
+
+    def forward(self, x, num_feat=None, cat_feat=None):
+        if self.num_feat is None and self.cat_feat is None:
+            return x
+        concat = [x]
+        if self.num_feat is not None:
+            concat.append(num_feat)
+        if self.cat_feat is not None:
+            concat.append(self.embeddings(cat_feat))
         concat = torch.cat(concat, dim=1 if self.seq_last else 2)
         return concat
 
