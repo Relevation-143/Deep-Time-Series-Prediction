@@ -6,9 +6,7 @@
 """
 import torch.nn as nn
 import torch
-from deepseries.nn.comm import InputsEXP, Dense
-from deepseries.nn.init import rnn_init
-from deepseries.nn.attention import RNNAttention
+from deepseries.nn import Dense, Inputs, init_rnn
 
 
 class RNNEncoder(nn.Module):
@@ -16,11 +14,11 @@ class RNNEncoder(nn.Module):
     def __init__(self, series_dim, hidden_dim, compress_dim, activation='SELU',
                  dropout=0.5, num_feat=None, cat_feat=None, rnn_type='gru', n_layers=1, initializer='xavier'):
         super().__init__()
-        self.input = InputsEXP(num_feat, cat_feat, seq_last=False, dropout=dropout)
+        self.input = Inputs(num_feat, cat_feat, seq_last=False, dropout=dropout)
         self.rnn = getattr(nn, rnn_type)(self.input.output_dim + series_dim, hidden_dim,
                                          num_layers=n_layers, dropout=dropout, batch_first=True)
         self.compress = Dense(hidden_dim, compress_dim, dropout=dropout, activation=activation)
-        rnn_init(self.rnn, initializer)
+        init_rnn(self.rnn, initializer)
 
     def forward(self, x, num=None, cat=None):
         """
@@ -43,7 +41,7 @@ class RNNEncoder(nn.Module):
 
 class RNNDecoder(nn.Module):
 
-    def __init__(self, series_dim, hidden_dim, enc_output_dim, activation='SELU', residual=True, attn_heads=None, attn_size=None,
+    def __init__(self, series_dim, hidden_dim, compress_dim, activation='SELU', residual=True, attn_heads=None, attn_size=None,
                  dropout=0.1, num_feat=None, cat_feat=None, rnn_type='gru', n_layers=1, initializer='xavier'):
         """
             https://stackoverflow.com/questions/44238154/what-is-the-difference-between-luong-attention-and-bahdanau-attention
@@ -53,7 +51,7 @@ class RNNDecoder(nn.Module):
         Args:
             series_dim:
             hidden_dim:
-            enc_output_dim:
+            compress_dim:
             activation:
             residual:
             attn_heads:
@@ -66,7 +64,7 @@ class RNNDecoder(nn.Module):
             initializer:
         """
         super().__init__()
-        self.input = InputsEXP(num_feat, cat_feat, seq_last=False, dropout=dropout)
+        self.input = Inputs(num_feat, cat_feat, seq_last=False, dropout=dropout)
         self.rnn = getattr(nn, rnn_type)(self.input.output_dim + series_dim, hidden_dim,
                                          num_layers=n_layers, dropout=dropout, batch_first=True)
         self.residual = residual
@@ -91,7 +89,7 @@ class RNNDecoder(nn.Module):
             else:
                 concat = torch.cat([outputs, attn_outputs], dim=2)
                 y = self.output(concat)
-            return y, hidden, p_attn
+            return y, outputs, hidden, p_attn
         else:
             if self.residual:
                 concat = torch.cat([outputs, x], dim=2)
@@ -108,8 +106,12 @@ class RNN2RNN(nn.Module):
         super().__init__()
         self.encoder = RNNEncoder(series_dim, hidden_dim, compress_dim, activation,
                                   dropout, enc_num_feat, enc_cat_feat, rnn_type, n_layers, initializer)
-        self.decoder = RNNEncoder(series_dim, hidden_dim, compress_dim, activation, dropout, dec_num_feat,
-                                  dec_cat_feat, rnn_type, n_layers, initializer)
+        self.decoder = RNNDecoder(series_dim, hidden_dim, compress_dim, activation, residual, attn_heads, attn_size,
+                                  dropout, dec_num_feat, dec_cat_feat, rnn_type, n_layers, initializer)
 
-    def forward(self, enc_x, dec_x):
-        enc_outputs, enc_hidden = self.encoder()
+    def forward(self, enc_x, dec_len, enc_num=None, enc_cat=None, dec_num=None, dec_cat=None):
+        enc_compress, enc_outputs, enc_hidden = self.encoder(enc_x, enc_num, enc_cat)
+
+
+    def batch_loss(self):
+        pass

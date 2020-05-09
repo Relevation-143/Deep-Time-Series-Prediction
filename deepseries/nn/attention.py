@@ -30,18 +30,19 @@ class Align(nn.Module):
         return torch.matmul(p_attn, value), p_attn
 
 
-class RNNAttention(nn.Module):
+class Attention(nn.Module):
     """
     Take in model size and number of heads.
+    general attention
     """
 
-    def __init__(self, h, attn_size, query_size, key_size, value_size, dropout=0.1):
+    def __init__(self, heads, attn_size, query_size, key_size, value_size, dropout=0.1):
         super().__init__()
-        assert attn_size % h == 0
+        assert attn_size % heads == 0
 
         # We assume d_v always equals d_k
-        self.d_k = attn_size // h
-        self.h = h
+        self.d_k = attn_size // heads
+        self.h = heads
 
         self.linear_layers = nn.ModuleList([nn.Linear(s, attn_size) for s in [query_size, key_size, value_size]])
         self.output_linear = nn.Linear(attn_size, attn_size)

@@ -9,7 +9,7 @@ import torch.nn.init as init
 import math
 
 
-def rnn_init(x, type='uniform'):
+def init_rnn(x, type='uniform'):
     for layer in x._all_weights:
         for w in layer:
             if 'weight' in w:

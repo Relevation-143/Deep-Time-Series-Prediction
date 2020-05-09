@@ -29,9 +29,14 @@ class Dense(nn.Module):
 
 class Embeddings(nn.Module):
 
-    def __init__(self, embeds_dim, seq_last=True):
+    """
+    References:
+      embedding weight initialize https://arxiv.org/pdf/1711.09160.pdf
+    """
+
+    def __init__(self, embeds_dims, seq_last=False):
         super().__init__()
-        self.embeddings = nn.ModuleList([nn.Embedding(i, o) for i, o in embeds_dim]) if embeds_dim else None
+        self.embeddings = nn.ModuleList([nn.Embedding(i, o) for i, o in embeds_dims])
         self.seq_last = seq_last
 
     def forward(self, inputs):
@@ -43,39 +48,14 @@ class Embeddings(nn.Module):
                 [self.embeddings[d](inputs[:, :, d]) for d in range(inputs.shape[2])], dim=2)
         return embed
 
+    def reset_parameters(self):
+        for layer in self.embeddings:
+            nn.init.xavier_normal_(layer.weight)
+
 
 class Inputs(nn.Module):
 
-    def __init__(self, num_features=None, cat_features=None, batch_norm=False,
-                 activation=None, dropout=0., seq_last=True):
-        super().__init__()
-        self.num_features = num_features
-        self.cat_features = cat_features
-        self.num_dim = 0 if num_features is None else num_features
-        self.cat_dim = 0 if cat_features is None else sum([i for _, i in cat_features])
-        self.output_dim = self.num_dim + self.cat_dim
-
-        self.embeddings = Embeddings(cat_features, seq_last) if cat_features else None
-        self.batch_norm = nn.BatchNorm1d(self.output_dim) if batch_norm else None
-        self.activation = activation
-        self.dropout = nn.Dropout(dropout)
-        self.seq_last = seq_last
-
-    def forward(self, num=None, cat=None):
-        if self.num_features is None and self.cat_features is None:
-            return None
-        concat = []
-        if self.num_features is not None:
-            concat.append(num)
-        if self.cat_features is not None:
-            concat.append(self.embeddings(cat))
-        concat = torch.cat(concat, dim=1 if self.seq_last else 2)
-        return concat
-
-
-class InputsEXP(nn.Module):
-
-    def __init__(self, num_feat=None, cat_feat=None, seq_last=True, dropout=0.):
+    def __init__(self, num_feat=None, cat_feat=None, seq_last=False, dropout=0.):
         super().__init__()
         self.num_feat = num_feat
         self.cat_feat = cat_feat
