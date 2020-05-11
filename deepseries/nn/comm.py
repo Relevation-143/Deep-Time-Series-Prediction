@@ -10,11 +10,11 @@ from torch import nn
 
 class Dense(nn.Module):
 
-    def __init__(self, in_features, out_features, bias=True, dropout=0.1, activation=None):
+    def __init__(self, in_features, out_features, bias=True, dropout=0.1, nonlinearity=None):
         super().__init__()
         self.fc = nn.Linear(in_features, out_features, bias=bias)
         self.dropout = nn.Dropout(dropout)
-        self.activation = getattr(nn, activation)() if activation else None
+        self.nonlinearity = getattr(nn, nonlinearity)() if nonlinearity else None
         self.reset_parameters()
 
     def forward(self, x):
@@ -34,12 +34,16 @@ class Embeddings(nn.Module):
       embedding weight initialize https://arxiv.org/pdf/1711.09160.pdf
     """
 
-    def __init__(self, embeds_dims, seq_last=False):
+    def __init__(self, embeds_size=None, seq_last=False):
         super().__init__()
-        self.embeddings = nn.ModuleList([nn.Embedding(i, o) for i, o in embeds_dims])
+        self.embeds_size = embeds_size
+        self.embeddings = nn.ModuleList([nn.Embedding(i, o) for i, o in embeds_size]) if embeds_size else None
         self.seq_last = seq_last
+        self.output_size = sum([i for _, i in embeds_size]) if embeds_size else 0
 
     def forward(self, inputs):
+        if inputs is None:
+            return None
         if self.seq_last:
             embed = torch.cat(
                 [self.embeddings[d](inputs[:, d]).transpose(1, 2) for d in range(inputs.shape[1])], dim=1)
@@ -49,32 +53,40 @@ class Embeddings(nn.Module):
         return embed
 
     def reset_parameters(self):
-        for layer in self.embeddings:
-            nn.init.xavier_normal_(layer.weight)
+        if self.embeds_size:
+            for layer in self.embeddings:
+                nn.init.xavier_normal_(layer.weight)
+
+
+class Concat(nn.Module):
+    def __init__(self, dim):
+        super().__init__()
+        self.dim = dim
+
+    def forward(self, *x):
+        return torch.cat([i for i in x if i is not None], self.dim)
 
 
 class Inputs(nn.Module):
 
-    def __init__(self, num_feat=None, cat_feat=None, seq_last=False, dropout=0.):
+    def __init__(self, num_size=None, cat_size=None, seq_last=False, dropout=0.):
         super().__init__()
-        self.num_feat = num_feat
-        self.cat_feat = cat_feat
-        self.num_dim = 0 if num_feat is None else num_feat
-        self.cat_dim = 0 if cat_feat is None else sum([i for _, i in cat_feat])
-        self.output_dim = self.num_dim + self.cat_dim
+        self.num_size = num_size
+        self.cat_size = cat_size
+        self.embeddings = Embeddings(cat_size, seq_last) if cat_size else None
+        self.output_size = ((0 if num_size is None else num_size)
+                            + 0 if cat_size is None else self.embeddings.output_size)
         self.dropout = nn.Dropout(dropout)
-
-        self.embeddings = Embeddings(cat_feat, seq_last) if cat_feat else None
         self.seq_last = seq_last
 
-    def forward(self, x, num_feat=None, cat_feat=None):
-        if self.num_feat is None and self.cat_feat is None:
+    def forward(self, x, num=None, cat=None):
+        if self.num_size is None and self.cat_size is None:
             return x
         concat = [x]
-        if self.num_feat is not None:
-            concat.append(num_feat)
-        if self.cat_feat is not None:
-            concat.append(self.embeddings(cat_feat))
+        if self.num_size is not None:
+            concat.append(num)
+        if self.cat_size is not None:
+            concat.append(self.embeddings(cat))
         concat = torch.cat(concat, dim=1 if self.seq_last else 2)
         return self.dropout(concat)
 

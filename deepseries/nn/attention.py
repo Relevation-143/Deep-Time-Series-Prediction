@@ -13,6 +13,9 @@ import math
 class Align(nn.Module):
     """
     Compute 'Scaled Dot Product Attention
+
+    References:
+        https://github.com/codertimo/BERT-pytorch/blob/d10dc4f9d5a6f2ca74380f62039526eb7277c671/bert_pytorch/model/attention/single.py#L8
     """
 
     def forward(self, query, key, value, mask=None, dropout=None):
@@ -34,8 +37,15 @@ class Attention(nn.Module):
     """
     Take in model size and number of heads.
     general attention
-    """
 
+    Args:
+        query, key, value, mask. shape like (B, S, N)
+    Returns:
+        attention_value, (B, query_lens, N)
+        attention_weight, (B, Head, query_lens, values_lens)
+    References:
+        https://github.com/codertimo/BERT-pytorch/blob/d10dc4f9d5a6f2ca74380f62039526eb7277c671/bert_pytorch/model/attention/single.py#L8
+    """
     def __init__(self, heads, attn_size, query_size, key_size, value_size, dropout=0.1):
         super().__init__()
         assert attn_size % heads == 0
@@ -68,54 +78,10 @@ class Attention(nn.Module):
         return self.output_linear(x), attn
 
 
-# class Align(nn.Module):
-#
-#     def __init__(self, score='dot', size=None):
-#         super().__init__()
-#         self.score = score
-#         self.size = size
-#         if score == 'concat':
-#             self.W = nn.Parameter(torch.zeros(size * 2, size), requires_grad=True)
-#             self.V = nn.Parameter(torch.zeros(size, 1), requires_grad=True)
-#             nn.init.xavier_normal_(self.W)
-#             nn.init.xavier_normal_(self.V)
-#         elif score == 'general':
-#             self.W = nn.Parameter(torch.zeros(size, size), requires_grad=True)
-#             nn.init.xavier_normal_(self.W)
-#         elif score == 'dot':
-#             pass
-#         else:
-#             raise ValueError
-#
-#     def forward(self, q, k, v):
-#         """
-#
-#         Args:
-#             q: B x S x N
-#             k: B x S x N
-#             v: B x S x N
-#
-#         Returns:
-#
-#         """
-#         lens = k.shape[1]
-#         if self.score == 'concat':
-#             align = torch.tanh(torch.cat([q.repeat(1, lens, 1), k], dim=2) @ self.W) @ self.V
-#         elif self.score == 'general':
-#             align = k @ (q @ self.W).transpose(1, 2)
-#         elif self.score == 'dot':
-#             align = k @ q.transpose(1, 2)
-#         else:
-#             raise ValueError
-#         weight = torch.softmax(align / math.sqrt(lens), 1)  # B x S x 1
-#         values = (v.transpose(1, 2) @ weight).transpose(1, 2)  # B x 1 x N
-#         return values, weight
-
-
 if __name__ == "__main__":
 
     q = torch.rand(4, 1, 30)
     k = torch.rand(4, 12, 9)
 
-    attn = RNNAttention(3, 12, 30, 9, 9, dropout=0.)
+    attn = Attention(heads=3, attn_size=9, query_size=30, value_size=9, key_size=9)
     values, weights = attn(q, k, k)
