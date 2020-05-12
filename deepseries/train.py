@@ -16,10 +16,9 @@ import copy
 
 class Learner:
 
-    def __init__(self, model, optimizer, loss_fn, root_dir, verbose=4, lr_scheduler=None, grad_clip=5):
+    def __init__(self, model, optimizer, root_dir, verbose=4, lr_scheduler=None, grad_clip=5):
         self.model = model
         self.optimizer = optimizer
-        self.loss_fn = loss_fn
         self.lr_scheduler = lr_scheduler
         self.grad_clip = grad_clip
         self.root_dir = root_dir
@@ -66,7 +65,11 @@ class Learner:
                 self.model.train()
                 train_loss = 0
                 for j, (x, y, w) in enumerate(train_dl):
-                    loss = self.loss_batch(x, y, w)
+                    self.optimizer.zero_grad()
+                    loss = self.model.batch_loss(x, y, w)
+                    loss.backward()
+                    self.optimizer.step()
+                    loss = loss.item()
                     writer.add_scalar("Loss/train", loss, self.global_steps)
                     self.global_steps += 1
                     train_loss += loss
@@ -77,7 +80,8 @@ class Learner:
                 valid_loss = 0
                 self.model.eval()
                 for x, y, w in valid_dl:
-                    loss = self.eval_batch(x, y, w)
+                    with torch.no_grad():
+                        loss = self.model.batch_loss(x, y, w).item()
                     valid_loss += loss / len(valid_dl)
                 writer.add_scalar("Loss/valid", valid_loss, self.global_steps)
                 epoch_use_time = (time.time() - time_start) / 60
@@ -108,26 +112,26 @@ class Learner:
 
             logging.info(f"training finished, best epoch {self.best_epoch}, best valid loss {self.best_loss:.4f}")
 
-    def loss_batch(self, x, y, w):
-        self.optimizer.zero_grad()
-        if isinstance(x, dict):
-            y_hat = self.model(**x)
-        else:
-            y_hat = self.model(*x)
-        loss = self.loss_fn(y_hat, y, w)  # / y.shape[0]  # add gradient normalize
-        loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.grad_clip)
-        self.optimizer.step()
-        return loss.item()
-
-    def eval_batch(self, x, y, w):
-        with torch.no_grad():
-            if isinstance(x, dict):
-                y_hat = self.model(**x)
-            else:
-                y_hat = self.model(*x)
-            loss = self.loss_fn(y, y_hat, w)  # / y.shape[0]  # add gradient normalize
-        return loss.item()
+    # def loss_batch(self, x, y, w):
+    #     self.optimizer.zero_grad()
+    #     if isinstance(x, dict):
+    #         y_hat = self.model(**x)
+    #     else:
+    #         y_hat = self.model(*x)
+    #     loss = self.loss_fn(y_hat, y, w)  # / y.shape[0]  # add gradient normalize
+    #     loss.backward()
+    #     torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.grad_clip)
+    #     self.optimizer.step()
+    #     return loss.item()
+    #
+    # def eval_batch(self, x, y, w):
+    #     with torch.no_grad():
+    #         if isinstance(x, dict):
+    #             y_hat = self.model(**x)
+    #         else:
+    #             y_hat = self.model(*x)
+    #         loss = self.loss_fn(y, y_hat, w)  # / y.shape[0]  # add gradient normalize
+    #     return loss.item()
 
     def load(self, epoch, checkpoint_dir=None):
         if checkpoint_dir is None:

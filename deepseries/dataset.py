@@ -140,7 +140,7 @@ class Seq2SeqDataLoader:
         """ return num batch in one epoch"""
         if self.series_size == 1:
             size = len(self.val_time_start_idx) // self.batch_size
-            if len(size) % self.batch_size == 0 or self.drop_last:
+            if size % self.batch_size == 0 or self.drop_last:
                 return size // self.batch_size
             else:
                 return size // self.batch_size + 1
@@ -189,6 +189,8 @@ class Seq2SeqDataLoader:
                 self.enc_num_feats.read_batch(batch_series_idx, enc_time_idx, self.seq_last), 'float32'),
             "enc_cat": self.check_to_tensor(
                 self.enc_cat_feats.read_batch(batch_series_idx, enc_time_idx, self.seq_last), 'int64'),
+            "dec_x": self.check_to_tensor(
+                self.xy.read_batch(batch_series_idx, dec_time_idx-1, self.seq_last), 'float32'),
             "dec_num": self.check_to_tensor(
                 self.dec_num_feats.read_batch(batch_series_idx, dec_time_idx, self.seq_last), 'float32'),
             "dec_cat": self.check_to_tensor(

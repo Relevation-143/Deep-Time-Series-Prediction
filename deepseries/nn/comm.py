@@ -19,12 +19,12 @@ class Dense(nn.Module):
 
     def forward(self, x):
         x = self.dropout(self.fc(x))
-        if self.activation is not None:
-            x = self.activation(x)
+        if self.nonlinearity is not None:
+            x = self.nonlinearity(x)
         return x
 
     def reset_parameters(self):
-        nn.init.xavier_normal_(self.fc)
+        nn.init.xavier_normal_(self.fc.weight)
 
 
 class Embeddings(nn.Module):

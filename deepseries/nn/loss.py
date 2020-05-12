@@ -28,3 +28,30 @@ class RMSELoss:
             ret = F.mse_loss(input, target, reduction='none')
             loss = torch.sqrt(torch.mean(ret * weight))
             return loss
+
+
+class RNNStabilityLoss:
+    """
+    References:
+        https://arxiv.org/pdf/1511.08400.pdf
+    """
+
+    def __init__(self, beta=1e-5):
+        self.beta = beta
+
+    def __call__(self, rnn_output):
+        if self.beta == .0:
+            return .0
+        l2 = torch.sqrt(torch.sum(torch.pow(rnn_output, 2), dim=-1))
+        return self.beta * torch.mean(torch.pow(l2[1:] - l2[:-1], 2))
+
+
+class RNNActivationLoss:
+
+    def __init__(self, beta=1e-5):
+        self.beta = beta
+
+    def __call__(self, rnn_output):
+        if self.beta == .0:
+            return .0
+        return torch.sum(torch.norm(rnn_output)) * self.beta
