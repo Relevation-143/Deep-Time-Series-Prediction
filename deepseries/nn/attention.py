@@ -75,6 +75,7 @@ class Attention(nn.Module):
         # 3) "Concat" using a view and apply a final linear.
         x = x.transpose(1, 2).contiguous().view(batch_size, -1, self.h * self.d_k)
 
+        # (B, S, N), (B, H, S_q, S_k)
         return self.output_linear(x), attn
 
 

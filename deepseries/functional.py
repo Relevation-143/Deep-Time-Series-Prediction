@@ -53,7 +53,7 @@ def single_autocorr(series, lag):
 
 
 # TODO numba jit speed
-def batch_autocorr(data, lags, starts, ends, threshold, backoffset=0, use_smooth=False):
+def batch_autocorr(data, lags, starts, ends, threshold, backoffset=0, use_smooth=False, smooth_offset=1):
     """
     Args:
         data: Time series, shape [n_pages, n_days]
@@ -70,7 +70,7 @@ def batch_autocorr(data, lags, starts, ends, threshold, backoffset=0, use_smooth
     """
     if isinstance(lags, typing.Iterable):
         return np.concatenate(
-            [batch_autocorr(data, l, starts, ends, threshold, backoffset, use_smooth) for l in lags],
+            [batch_autocorr(data, l, starts, ends, threshold, backoffset, use_smooth, smooth_offset) for l in lags],
             axis=1)
     else:
         if lags < 3:
@@ -89,8 +89,8 @@ def batch_autocorr(data, lags, starts, ends, threshold, backoffset=0, use_smooth
                 series = series[starts[i]:end]
                 if use_smooth:
                     c_365 = single_autocorr(series, lags)
-                    c_364 = single_autocorr(series, lags-1)
-                    c_366 = single_autocorr(series, lags+1)
+                    c_364 = single_autocorr(series, lags-smooth_offset)
+                    c_366 = single_autocorr(series, lags+smooth_offset)
                     # Average value between exact lag and two nearest neighborhoods for smoothness
                     corr[i] = 0.5 * c_365 + 0.25 * c_364 + 0.25 * c_366
                 else:
@@ -139,25 +139,24 @@ def get_valid_start_end(data, mask=None):
     """
 
     Args:
-        data (ndarray): shape N x S
+        data (ndarray): shape N x S x D
         mask (ndarray of bool): invalid mask
-        mask_zero (bool): mask zero as invalid values, when mask is None
     Returns:
 
     """
-    n_series = data.shape[0]
-    n_time = data.shape[1]
-    start_idx = np.full(n_series, -1, dtype=np.int32)
-    end_idx = np.full(n_series, -1, dtype=np.int32)
+    ns = data.shape[0]
+    nt = data.shape[1]
+    start_idx = np.full(ns, -1, dtype=np.int32)
+    end_idx = np.full(ns, -1, dtype=np.int32)
 
-    for s in range(n_series):
+    for s in range(ns):
         # scan from start to the end
-        for t in range(n_time):
+        for t in range(nt):
             if not mask[s][t]:
                 start_idx[s] = t
                 break
         # reverse scan, from end to start
-        for t in range(n_time - 1, -1, -1):
+        for t in range(nt - 1, -1, -1):
             if not mask[s][t]:
                 end_idx[s] = t + 1
                 break

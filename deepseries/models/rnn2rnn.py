@@ -77,7 +77,7 @@ class RNNDecoder(nn.Module):
         super().__init__()
         self.embeds = Embeddings(cat_size, seq_last=False)
         self.concat = Concat(dim=2)
-        rnn_input_size = series_size + self.embeds.output_size + (series_size + num_size if num_size else 0)
+        rnn_input_size = series_size + self.embeds.output_size + (num_size if num_size else 0)
         self.rnn = getattr(nn, rnn_type)(rnn_input_size, hidden_size, num_layers=n_layers,
                                          dropout=dropout, batch_first=True)
         self.residual = residual
@@ -110,7 +110,7 @@ class RNN2RNN(nn.Module):
 
     def __init__(self, series_size, hidden_size, compress_size, nonlinearity='SELU', residual=True,
                  attn_heads=None, attn_size=None, dropout=0.1, enc_num_size=None, enc_cat_size=None,
-                 dec_num_size=None, dec_cat_size=None, rnn_type='GRU', num_layers=1, beta1=1e-5, beta2=1e-5,
+                 dec_num_size=None, dec_cat_size=None, rnn_type='GRU', num_layers=1, beta1=1e-6, beta2=1e-6,
                  loss_fn=MSELoss()):
         super().__init__()
         self.encoder = RNNEncoder(series_size, hidden_size, compress_size, nonlinearity, dropout, enc_num_size,
@@ -148,4 +148,8 @@ class RNN2RNN(nn.Module):
                                                      cat=None if dec_cat is None else dec_cat[:, [i]])
             ys.append(prev_y)
             ps.append(p_attn)
-        return torch.cat(ys, 1), ps
+        return torch.cat(ys, 1), torch.cat(ps, 2) if hasattr(self.decoder, 'attn') else None
+
+    @torch.no_grad()
+    def predict(self, *args, **kw):
+        return self(*args, **kw)
