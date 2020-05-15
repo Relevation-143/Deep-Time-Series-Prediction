@@ -41,13 +41,12 @@ def normalize(x, axis, fill_zero=True):
 power = pd.read_csv('./data/df.csv', parse_dates=['data_time'])[['data_time', 'cid', 'value']]
 power = power.set_index("data_time").groupby("cid").resample("1H").sum().reset_index()
 power = power.pivot(index='cid', columns='data_time', values='value')
-power = power.apply(np.log1p)
 
 N_TEST = 24 * 30
 N_VALID = 24 * 2
 DROP_ZERO = True
 DEC_LEN = 24 * 2
-ENC_LEN = 24 * 1
+ENC_LEN = 24 * 7
 time_free_space = 0
 
 drop_before = 15000
@@ -59,20 +58,20 @@ starts, ends = F.get_valid_start_end(xy, ~xy_valid)
 xy, xy_mean, xy_std = normalize(xy, axis=1)
 
 
-corr_1 = F.batch_autocorr(xy, 1*24, starts, ends, 1.05, use_smooth=False, smooth_offset=None)
 corr_7 = F.batch_autocorr(xy, 7*24, starts, ends, 1.05, use_smooth=False, smooth_offset=None)
+corr_14 = F.batch_autocorr(xy, 14*24, starts, ends, 1.05, use_smooth=False, smooth_offset=None)
 corr_365 = F.batch_autocorr(xy, 365*24, starts, ends, 1.05, use_smooth=True, smooth_offset=24)
-xy_auto_corr = np.concatenate([corr_1, corr_7, corr_365], 1)
+xy_auto_corr = np.concatenate([corr_7, corr_14, corr_365], 1)
 xy_auto_corr, _, _ = normalize(xy_auto_corr, 0)
 
-xy_lags, _, _ = normalize(F.make_lags(xy, [7*24, 365*24]), axis=2)
+xy_lags, _, _ = normalize(F.make_lags(xy, [7*24, 14*24, 365*24]), axis=2)
 xy_valid = np.expand_dims(xy_valid.astype("float32"), 1)
 xy_lag_valid = np.concatenate([xy_lags,  xy_valid], axis=1).astype("float32").transpose([0, 2, 1])
 
-weights = xy_valid
-weights[:, :, np.where((power.columns >= "2020-02-01") & (power.columns < "2020-03-01"), 1, 0)] = 0.01
-weights = weights * xy_mean / xy_mean.mean()
-weights = weights.transpose([0, 2, 1])
+weights = xy_valid.transpose([0, 2, 1])
+# weights[:, :, np.where((power.columns >= "2020-02-01") & (power.columns < "2020-03-01"), 1, 0)] = 0.01
+# weights = weights * xy_mean / xy_mean.mean()
+# weights = weights.transpose([0, 2, 1])
 xy_cat = np.expand_dims(np.arange(len(weights)), 1)
 
 def get_holiday_features(dts):
@@ -158,17 +157,17 @@ valid_frame = Seq2SeqDataLoader(valid_xy, batch_size=64, enc_lens=ENC_LEN, dec_l
                                 seq_last=False)
 
 
-model = RNN2RNN(1, hidden_size=512, compress_size=128, enc_num_size=63,
-                enc_cat_size=[(62, 2)], dec_num_size=63, dec_cat_size=[(62, 2)], residual=False,
-                beta1=0., beta2=0., attn_heads=None, attn_size=128, num_layers=2, dropout=0.0, rnn_type='LSTM')
+model = RNN2RNN(1, hidden_size=512, compress_size=128, enc_num_size=64,
+                enc_cat_size=[(62, 2)], dec_num_size=64, dec_cat_size=[(62, 2)], residual=True,
+                beta1=0., beta2=0., attn_heads=1, attn_size=128, num_layers=1, dropout=0.0, rnn_type='LSTM')
 opt = Adam(model.parameters(), 0.001)
-loss_fn = RMSELoss()
+loss_fn = MSELoss()
 model.cuda()
 lr_scheduler = ReduceCosineAnnealingLR(opt, 64, eta_min=5e-5)
-learner = Learner(model, opt, './power_preds', verbose=20, lr_scheduler=lr_scheduler)
+learner = Learner(model, opt, './power_preds', verbose=20, lr_scheduler=None)
 learner.fit(500, train_frame, valid_frame, patient=128, start_save=1, early_stopping=True)
-learner.load(466)
-learner.model.train()
+learner.load(460)
+learner.model.eval()
 
 preds = []
 trues = []
@@ -177,10 +176,10 @@ for batch in valid_frame:
     preds.append(learner.model(**batch[0])[0])
     trues.append(batch[1])
 
-trues = np.expm1(torch.cat(trues, 2).squeeze().cpu().numpy() * xy_std + xy_mean)
-preds = np.expm1(torch.cat(preds, 2).squeeze().detach().cpu().numpy() * xy_std + xy_mean)
+trues = torch.cat(trues, 2).squeeze().cpu().numpy() * xy_std + xy_mean
+preds = torch.cat(preds, 2).squeeze().detach().cpu().numpy() * xy_std + xy_mean
 
-k = 61
+k = 0
 
 plt.plot(trues[k])
 plt.plot(preds[k], label='preds')
@@ -238,10 +237,10 @@ def predict(learner, xy, x_num, x_cat, y_num, y_cat):
         preds.append(step_pred[:, -24:])
 
     preds = np.concatenate(preds, axis=1)
-    preds = np.expm1(preds.squeeze() * xy_std + xy_mean)
+    preds = preds.squeeze() * xy_std + xy_mean
 
-    x_true = np.expm1(xy[:, :ENC_LEN + 24].cpu().numpy().squeeze() * xy_std + xy_mean)
-    y_true = np.expm1(xy[:, ENC_LEN + 24:].cpu().numpy().squeeze() * xy_std + xy_mean)
+    x_true = xy[:, :ENC_LEN + 24].cpu().numpy().squeeze() * xy_std + xy_mean
+    y_true = xy[:, ENC_LEN + 24:].cpu().numpy().squeeze() * xy_std + xy_mean
 
     return x_true, y_true, preds
 

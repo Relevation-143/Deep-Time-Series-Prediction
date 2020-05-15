@@ -30,16 +30,16 @@ from deepseries.nn.loss import RMSELoss
 from deepseries.optim import ReduceCosineAnnealingLR
 
 DIR = "./data"
-N_ROWS = 100000
+N_ROWS = 100
 BATCH_SIZE = 32
 
 
-LAGS = [365]
+LAGS = [365, 182, 90, 28]
 MAX_LAGS = max(LAGS)
-DROP_BEFORE = 1300
+DROP_BEFORE = 1000
 
 SEQ_LAST = False
-ENC_LEN = 512
+ENC_LEN = 56
 DEC_LEN = 28
 
 VALID_LEN = 28
@@ -105,7 +105,7 @@ def load_data():
     dt['d'] = dt['d'].str.replace('d_', '').astype("int32")
     price = dt.pivot(index="id", columns="d", values="sell_price")
     xy = dt.pivot(index="id", columns="d", values="sales")
-    del dt;
+    del dt
     gc.collect()
     print(f"sale_xy shape {xy.shape}")
     print(f"price shape {price.shape}")
@@ -127,8 +127,8 @@ def load_data():
 
 df_series, df_price, df_calendar, df_product, df_sub = load_data()
 # series
-series = np.log1p(df_series.values)
-price = np.log1p(df_price.values)
+series = df_series.values
+price = df_price.values
 
 # series state
 series_nan = np.isnan(series).astype("int8")
@@ -147,6 +147,18 @@ series_kurt = np.clip(sp.stats.mstats.kurtosis(series_valid_masked, axis=1).data
 
 series = np.nan_to_num(
     (series - np.expand_dims(series_mean, 1)) / (np.expand_dims(series_std, 1) + 1e-7), False).astype("float32")
+
+
+# lag
+from deepseries.functional import make_lags, batch_autocorr, get_valid_start_end
+series_lags = []
+for l in LAGS:
+    series_lags.append(make_lags(series, l, use_smooth=True if l > 100 else False))
+start, end = get_valid_start_end(series, series_valid_masked)
+
+series_lags = np.concatenate(series_lags, 1).transpose([0, 2, 1])
+series_lags = np.nan_to_num(series_lags)
+corr = batch_autocorr(series, LAGS, start, end, 1.05)
 
 
 # series statistic features
@@ -203,6 +215,12 @@ class ForwardSpliter:
         train_idx = time_idx[:-valid_size]
         return train_idx, valid_idx
 
+series = series[:, :, MAX_LAGS:]
+xy_event_type = xy_event_type[:, :, MAX_LAGS:]
+xy_calendar_embed = xy_calendar_embed[:, :, MAX_LAGS:]
+x_series_label = x_series_label[:, :, MAX_LAGS:]
+series_lags = series_lags[:, MAX_LAGS:]
+
 
 spliter = ForwardSpliter()
 
@@ -225,6 +243,15 @@ train_xy_cat = Property(xy_series_cat)
 valid_xy_cat = Property(xy_series_cat)
 test_xy_cat = Property(xy_series_cat)
 
+
+train_series_lags = TimeSeries(series_lags[:, train_idx])
+valid_series_lags = TimeSeries(series_lags[:, valid_idx])
+test_series_lags = TimeSeries(series_lags[:, test_idx])
+
+train_series_corr = Property(corr)
+valid_series_corr = Property(corr)
+test_series_corr = Property(corr)
+
 train_xy_event = TimeSeries(xy_event_type[:, :, train_idx].transpose(0, 2, 1), idx_map=dict(zip(np.arange(N_ROWS), [0] * N_ROWS)))
 valid_xy_event = TimeSeries(xy_event_type[:, :, valid_idx].transpose(0, 2, 1), idx_map=dict(zip(np.arange(N_ROWS), [0] * N_ROWS)))
 test_xy_event = TimeSeries(xy_event_type[:, :, test_idx].transpose(0, 2, 1), idx_map=dict(zip(np.arange(N_ROWS), [0] * N_ROWS)))
@@ -241,9 +268,9 @@ train_dl = Seq2SeqDataLoader(train_series,
                              use_cuda=True,
                              mode='train',
                              time_free_space=10,
-                             enc_num_feats=[train_xy_series_stats, train_x_series_label, train_xy_calendar_embed],
+                             enc_num_feats=[train_series_lags, train_series_corr, train_xy_series_stats, train_x_series_label, train_xy_calendar_embed],
                              enc_cat_feats=[train_xy_cat, train_xy_event],
-                             dec_num_feats=[train_xy_series_stats, train_xy_calendar_embed],
+                             dec_num_feats=[train_series_lags, train_series_corr, train_xy_series_stats, train_xy_calendar_embed],
                              dec_cat_feats=[train_xy_cat, train_xy_event],
                              seq_last=False,
                             )
@@ -255,40 +282,41 @@ valid_dl = Seq2SeqDataLoader(valid_series,
                              use_cuda=True,
                              mode='valid',
                              time_free_space=0,
-                             enc_num_feats=[valid_xy_series_stats, valid_x_series_label, valid_xy_calendar_embed],
+                             enc_num_feats=[valid_series_lags, valid_series_corr, valid_xy_series_stats, valid_x_series_label, valid_xy_calendar_embed],
                              enc_cat_feats=[valid_xy_cat, valid_xy_event],
-                             dec_num_feats=[valid_xy_series_stats, valid_xy_calendar_embed],
+                             dec_num_feats=[valid_series_lags, valid_series_corr, valid_xy_series_stats, valid_xy_calendar_embed],
                              dec_cat_feats=[valid_xy_cat, valid_xy_event],
                              seq_last=False
                               )
 
 test_dl = Seq2SeqDataLoader(test_series,
-                             batch_size=BATCH_SIZE,
-                             enc_lens=ENC_LEN,
-                             dec_lens=DEC_LEN,
-                             use_cuda=True,
-                             mode='test',
-                             time_free_space=0,
-                             enc_num_feats=[test_xy_series_stats, test_x_series_label, test_xy_calendar_embed],
-                             enc_cat_feats=[test_xy_cat, test_xy_event],
-                             dec_num_feats=[test_xy_series_stats, test_xy_calendar_embed],
-                             dec_cat_feats=[test_xy_cat, test_xy_event],
+                            batch_size=BATCH_SIZE,
+                            enc_lens=ENC_LEN,
+                            dec_lens=DEC_LEN,
+                            use_cuda=True,
+                            mode='test',
+                            time_free_space=0,
+                            enc_num_feats=[test_series_lags, test_series_corr, test_xy_series_stats, test_x_series_label, test_xy_calendar_embed],
+                            enc_cat_feats=[test_xy_cat, test_xy_event],
+                            dec_num_feats=[test_series_lags, test_series_corr, test_xy_series_stats, test_xy_calendar_embed],
+                            dec_cat_feats=[test_xy_cat, test_xy_event],
                             seq_last=False,
-                      )
+                            )
 
 
-model = RNN2RNN(series_size=1, hidden_size=256, compress_size=128,
-                enc_num_size=15,                enc_cat_size=[(3049, 16), (7, 1), (10, 1), (3, 1), (3, 1), (32, 4), (5, 1), (5, 1), (3, 1)],
-                dec_num_size=13, attn_heads=1, attn_size=128,
+model = RNN2RNN(series_size=1, hidden_size=256, compress_size=64,
+                enc_num_size=23,                enc_cat_size=[(3049, 16), (7, 1), (10, 1), (3, 1), (3, 1), (32, 4), (5, 1), (5, 1), (3, 1)],
+                dec_num_size=21, attn_heads=4, attn_size=32, residual=False,
                 dec_cat_size=[(3049, 16), (7, 1), (10, 1), (3, 1), (3, 1), (32, 4), (5, 1), (5, 1), (3, 1)],
-                dropout=0.2, num_layers=2, rnn_type="LSTM")
-opt = Adam(model.parameters(), 0.002)
-loss_fn = RMSELoss()
+                dropout=0.1, num_layers=1, rnn_type="GRU")
+opt = Adam(model.parameters(), 0.001)
+loss_fn = MSELoss()
 lr_scheduler = ReduceCosineAnnealingLR(opt, 64, eta_min=1e-4, gamma=0.998)
 model.cuda()
 learner = Learner(model, opt, './m5_rnn', lr_scheduler=lr_scheduler, verbose=5000)
-learner.fit(5, train_dl, valid_dl, patient=64, start_save=100, early_stopping=False)
-
+learner.fit(1000, train_dl, valid_dl, patient=64, start_save=-1, early_stopping=True)
+learner.load(174)
+learner.model.eval()
 
 def predict_submission(model, test_dl):
     model.eval()
@@ -298,18 +326,20 @@ def predict_submission(model, test_dl):
         batch.pop('dec_x')
         preds.append(model.predict(**batch)[0].cpu().detach().numpy())
     preds = np.concatenate(preds, axis=0).squeeze()
-    preds = np.expm1(preds * np.expand_dims(series_std, 1) + np.expand_dims(series_mean, 1))
     return preds
 
 preds = predict_submission(learner.model, test_dl)
+yhat = preds * np.expand_dims(series_std, 1) + np.expand_dims(series_mean, 1)
+yhat.mean(1)[:20]
 top1 = pd.read_csv("./data/submission_top1.csv").set_index("id").loc[df_series.index]
+top1.mean(1)[:20].values
+
+yhat.mean()
+top1.mean().mean()
 def plot(idx):
     plt.figure(figsize=(16, 5))
-#     plt.plot(df_series.iloc[idx, -56:-28].values)
-    plt.plot(preds[idx], label='wave')
-    plt.plot(top1.iloc[idx, 1:].values, label='lgb')
-#     plt.title(f"enc {df_xy.iloc[idx, -56:-28].values.mean():.2f} pred {preds[idx].mean():.2f} top1 mean {top1.iloc[idx, 1:].values.mean():.2f}")
+    plt.plot(yhat[idx], label='wave')
+    plt.plot(top1.iloc[idx].values, label='lgb')
     plt.legend()
 
-plot(2)
-
+plot(32)
