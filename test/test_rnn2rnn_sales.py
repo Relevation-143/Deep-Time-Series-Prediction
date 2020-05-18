@@ -4,36 +4,26 @@
 @contact: evilpsycho42@gmail.com
 @time   : 2020/5/13 15:17
 """
-
 import os
 import gc
 import warnings
-
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import seaborn as sns
-from sklearn.metrics import mean_squared_error
 from sklearn.preprocessing import LabelEncoder
-import seaborn as sns
-from  datetime import datetime, timedelta
 import scipy as sp
-
-import torch
 from torch.optim import Adam
-from torch.nn import MSELoss
-
 from deepseries.models.rnn2rnn import RNN2RNN
 from deepseries.train import Learner
 from deepseries.dataset import TimeSeries, Property, Seq2SeqDataLoader
-from deepseries.nn.loss import RMSELoss
+from deepseries.nn.loss import RMSELoss, MSELoss
 from deepseries.optim import ReduceCosineAnnealingLR
+from deepseries.functional import get_valid_start_end
+warnings.filterwarnings("ignore")
 
 DIR = "./data"
 N_ROWS = 100
 BATCH_SIZE = 32
-
-
 LAGS = [365, 182, 90, 28]
 MAX_LAGS = max(LAGS)
 DROP_BEFORE = 1000
@@ -133,6 +123,7 @@ price = df_price.values
 # series state
 series_nan = np.isnan(series).astype("int8")
 series_zero = (series == 0).astype("int8")
+start, end = get_valid_start_end(np.bitwise_or(series_nan, series_zero))
 
 # series statistics
 
@@ -154,7 +145,7 @@ from deepseries.functional import make_lags, batch_autocorr, get_valid_start_end
 series_lags = []
 for l in LAGS:
     series_lags.append(make_lags(series, l, use_smooth=True if l > 100 else False))
-start, end = get_valid_start_end(series, series_valid_masked)
+
 
 series_lags = np.concatenate(series_lags, 1).transpose([0, 2, 1])
 series_lags = np.nan_to_num(series_lags)

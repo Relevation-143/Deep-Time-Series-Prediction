@@ -52,7 +52,7 @@ N_VALID = 2
 DEC_LEN = 2
 ENC_LEN = 7
 
-drop_before = 500
+drop_before = 1000
 
 
 starts, ends = F.get_valid_start_end(np.isnan(xy_daily))
@@ -144,7 +144,7 @@ train_frame = Seq2SeqDataLoader(train_xy, batch_size=8, enc_lens=ENC_LEN, dec_le
                                 dec_cat_feats=trn_dec_cat,
                                 weights=trn_weight, seq_last=False)
 valid_frame = Seq2SeqDataLoader(valid_xy, batch_size=64, enc_lens=ENC_LEN, dec_lens=DEC_LEN, use_cuda=True,
-                                mode='train', time_free_space=0,
+                                mode='valid', time_free_space=0,
                                 time_interval=48,
                                 enc_num_feats=val_enc_num,
                                 enc_cat_feats=val_enc_cat,
@@ -153,16 +153,16 @@ valid_frame = Seq2SeqDataLoader(valid_xy, batch_size=64, enc_lens=ENC_LEN, dec_l
                                 seq_last=False)
 
 
-model = RNN2RNN(96, hidden_size=512, compress_size=64, enc_num_size=40,
-                enc_cat_size=[(62, 2)], dec_num_size=40, dec_cat_size=[(62, 2)], residual=True,
-                beta1=0., beta2=0., attn_heads=1, attn_size=64, num_layers=1, dropout=0.0, rnn_type='GRU')
+model = RNN2RNN(96, hidden_size=256, compress_size=128, enc_num_size=40,
+                enc_cat_size=[(62, 4)], dec_num_size=40, dec_cat_size=[(62, 4)], residual=True,
+                beta1=.0, beta2=.0, attn_heads=1, attn_size=128, num_layers=1, dropout=0.0, rnn_type='GRU')
 opt = Adam(model.parameters(), 0.001)
 loss_fn = MSELoss()
 model.cuda()
 lr_scheduler = ReduceCosineAnnealingLR(opt, 64, eta_min=5e-5)
 learner = Learner(model, opt, './power_preds', verbose=20, lr_scheduler=lr_scheduler)
-learner.fit(100, train_frame, valid_frame, patient=128, start_save=1, early_stopping=True)
-learner.load(86)
+learner.fit(300, train_frame, valid_frame, patient=128, start_save=1, early_stopping=True)
+learner.load(299)
 learner.model.eval()
 
 preds = []
@@ -193,7 +193,7 @@ test_xy_cat_feats = torch.as_tensor(np.repeat(np.expand_dims(xy_cat, 1), test_xy
 def plot(x_true, y_true, y_pred):
     enc_ticks = np.arange(x_true.shape[1])
     dec_ticks = np.arange(y_pred.shape[1]) + x_true.shape[1]
-    for idx, name in enumerate(power.index):
+    for idx in range(x_true.shape[0]):
         plt.figure(figsize=(12, 3))
         plt.plot(enc_ticks, x_true[idx])
         plt.plot(dec_ticks, y_pred[idx], label='pred')
@@ -242,9 +242,8 @@ def predict(learner, xy, x_num, x_cat, y_num, y_cat):
 
 norm_data = pd.read_csv("./data/20200315_20200415.csv").drop(['Unnamed: 0', 'model_name'], axis=1)
 norm_data = norm_data[norm_data.contributor_id.isin(power_daily.index)].reset_index(drop=True)
-norm_data = norm_data.set_index("contributor_id").loc[power.index].reset_index()
 norm_data['data_time'] = pd.to_datetime(norm_data.data_time)
-norm_data = norm_data.set_index("data_time").groupby("contributor_id").resample('1H')[['forecast_pwr', 'value']].sum().reset_index()
+norm_data = norm_data.set_index("data_time").groupby("contributor_id").resample('15min')[['forecast_pwr', 'value']].sum().reset_index()
 norm_true = norm_data.pivot(index='contributor_id', columns='data_time', values='value').iloc[:, 48:]
 norm_pred = norm_data.pivot(index='contributor_id', columns='data_time', values='forecast_pwr').iloc[:, 48:]
 
@@ -254,4 +253,17 @@ metric(y_true, y_pred).mean().rename("wave").describe()
 scores = pd.DataFrame([metric(y_true, y_pred).mean().rename("wave"),
                        metric(norm_true.values, norm_pred.values).mean().rename("v1")]).T.dropna()
 scores.describe()
-plot(x_true, y_true, y_pred)
+
+# attn 1 mean: 0.19 50%: 0.154
+# attn 3 mean: 0.187 50%: 0.156
+# attn 0 mean: 0.188 50%: 0.159
+# add reg mean: 0.187 50% 0.156
+# 128 compress attn: 0.180 50% 0.15
+# 2 layer: 0.189  0.153
+# use 12 dim: 0.187  0.150
+# no res : 0.179 0.154
+# enc 14 day: 0.188 0.162
+# enc 2 day : 0.19  0.157
+
+
+plot(x_true.reshape(62, -1), y_true.reshape(62, -1), y_pred.reshape(62, -1))
