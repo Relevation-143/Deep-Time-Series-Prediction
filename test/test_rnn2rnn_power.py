@@ -39,36 +39,32 @@ def normalize(x, axis, fill_zero=True):
 
 
 power = pd.read_csv('./data/df.csv', parse_dates=['data_time'])[['data_time', 'cid', 'value']]
-power = power.set_index("data_time").groupby("cid").resample("1H").sum().reset_index()
-power = power.pivot(index='cid', columns='data_time', values='value')
+power_15min = power.set_index("data_time").groupby("cid").resample("15min").sum().reset_index()
+power_15min = power_15min.pivot(index='cid', columns='data_time', values='value')
+power_daily = power.set_index("data_time").groupby("cid").resample("1D").sum().reset_index()
+power_daily = power_daily.pivot(index='cid', columns='data_time', values='value')
 
-N_TEST = 24 * 30
-N_VALID = 24 * 2
-DROP_ZERO = True
-DEC_LEN = 24 * 2
-ENC_LEN = 24 * 7
-time_free_space = 0
+xy_15min = power_15min.values.reshape(62, -1, 4*24)  # (62, 1082, 96)
+xy_daily = power_daily.values
 
-drop_before = 15000
+N_TEST = 30
+N_VALID = 2
+DEC_LEN = 2
+ENC_LEN = 7
 
-
-xy = power.values
-xy_valid = np.bitwise_and(~np.isnan(xy), xy != 0)
-starts, ends = F.get_valid_start_end(xy, ~xy_valid)
-xy, xy_mean, xy_std = normalize(xy, axis=1)
+drop_before = 500
 
 
-corr_7 = F.batch_autocorr(xy, 7*24, starts, ends, 1.05, use_smooth=False, smooth_offset=None)
-corr_14 = F.batch_autocorr(xy, 14*24, starts, ends, 1.05, use_smooth=False, smooth_offset=None)
-corr_365 = F.batch_autocorr(xy, 365*24, starts, ends, 1.05, use_smooth=True, smooth_offset=24)
-xy_auto_corr = np.concatenate([corr_7, corr_14, corr_365], 1)
-xy_auto_corr, _, _ = normalize(xy_auto_corr, 0)
+starts, ends = F.get_valid_start_end(np.isnan(xy_daily))
+corr_7 = F.batch_autocorr(xy_daily, 7, starts, ends, 1.05, use_smooth=False, smooth_offset=None)
+corr_14 = F.batch_autocorr(xy_daily, 14, starts, ends, 1.05, use_smooth=False, smooth_offset=None)
+corr_365 = F.batch_autocorr(xy_daily, 365, starts, ends, 1.05, use_smooth=True, smooth_offset=2)
+xy_daily_auto_corr = np.concatenate([corr_7, corr_14, corr_365], 1)
+xy_daily_auto_corr = normalize(xy_daily_auto_corr, 0)[0]
 
-xy_lags, _, _ = normalize(F.make_lags(xy, [7*24, 14*24, 365*24]), axis=2)
-xy_valid = np.expand_dims(xy_valid.astype("float32"), 1)
-xy_lag_valid = np.concatenate([xy_lags,  xy_valid], axis=1).astype("float32").transpose([0, 2, 1])
+xy_lags = normalize(F.make_lags(xy_daily, [7, 14, 365])[:, :, drop_before:], axis=2)[0].transpose([0, 2, 1])
 
-weights = xy_valid.transpose([0, 2, 1])
+weights = (~np.bitwise_or(np.isnan(xy_15min), xy_15min == 0)).astype("float32")[:, drop_before:]
 # weights[:, :, np.where((power.columns >= "2020-02-01") & (power.columns < "2020-03-01"), 1, 0)] = 0.01
 # weights = weights * xy_mean / xy_mean.mean()
 # weights = weights.transpose([0, 2, 1])
@@ -83,7 +79,7 @@ def get_holiday_features(dts):
             return holiday_name
 
     holidays = pd.get_dummies(pd.Series(dts).apply(lambda x: _get_holidays(x)))
-    holidays['sick'] = np.where((power.columns >= "2020-02-01") & (power.columns < "2020-03-01"), 1, 0)
+    holidays['sick'] = np.where((power_daily.columns >= "2020-02-01") & (power_daily.columns < "2020-03-01"), 1, 0)
     holidays.index = dts
     return holidays
 
@@ -93,16 +89,17 @@ def holiday_apply(x, holidays, func):
         result[h] = x.loc[:, holidays[h].values.astype(bool)].agg(func, axis=1).values
     return result
 
-holidays = get_holiday_features(power.columns)
-xy_holiday_mean = holiday_apply(power, holidays, np.mean).values
+holidays = get_holiday_features(power_daily.columns)
+xy_holiday_mean = holiday_apply(power_daily, holidays, np.mean).values
 xy_holiday_mean = normalize(xy_holiday_mean, 0)[0]
 
-xy_weekday = pd.get_dummies(power.columns.weekday).values
-xy_hour = pd.get_dummies(power.columns.hour).values
-xy_month = pd.get_dummies(power.columns.month).values
-xy_date = np.concatenate([xy_weekday, xy_hour, xy_month, holidays], 1)
-xy_date = np.repeat(np.expand_dims(xy_date, 0), xy.shape[0], axis=0)
+xy_weekday = pd.get_dummies(power_daily.columns.weekday).values
+xy_hour = pd.get_dummies(power_daily.columns.hour).values
+xy_month = pd.get_dummies(power_daily.columns.month).values
+xy_date = np.concatenate([xy_weekday, xy_hour, xy_month, holidays], 1)[drop_before:]
+xy_date = np.repeat(np.expand_dims(xy_date, 0), xy_daily.shape[0], axis=0)
 
+xy, xy_mean, xy_std = normalize(xy_15min[:, drop_before:], 1)
 
 class ForwardSpliter:
 
@@ -115,10 +112,9 @@ class ForwardSpliter:
 
 
 spliter = ForwardSpliter()
-train_idx, valid_idx = spliter.split(np.arange(xy.shape[1])[drop_before:], ENC_LEN, N_TEST + N_VALID)
+train_idx, valid_idx = spliter.split(np.arange(xy.shape[1]), ENC_LEN, N_TEST + N_VALID)
 valid_idx, test_idx = spliter.split(valid_idx, ENC_LEN, N_TEST)
 
-xy = np.expand_dims(xy, 2)
 train_xy = TimeSeries(xy[:, train_idx])
 valid_xy = TimeSeries(xy[:, valid_idx])
 
@@ -132,18 +128,18 @@ trn_dec_cat = [Property(xy_cat)]
 val_dec_cat = [Property(xy_cat)]
 
 trn_enc_num = [TimeSeries(xy_date[:, train_idx]), Property(xy_holiday_mean),
-               TimeSeries(xy_lag_valid[:, train_idx]), Property(xy_auto_corr)]
+               TimeSeries(xy_lags[:, train_idx]), Property(xy_daily_auto_corr)]
 val_enc_num = [TimeSeries(xy_date[:, valid_idx]), Property(xy_holiday_mean),
-               TimeSeries(xy_lag_valid[:, valid_idx]), Property(xy_auto_corr)]
+               TimeSeries(xy_lags[:, valid_idx]), Property(xy_daily_auto_corr)]
 
 trn_dec_num = [TimeSeries(xy_date[:, train_idx]), Property(xy_holiday_mean),
-               TimeSeries(xy_lag_valid[:, train_idx]), Property(xy_auto_corr)]
+               TimeSeries(xy_lags[:, train_idx]), Property(xy_daily_auto_corr)]
 val_dec_num = [TimeSeries(xy_date[:, valid_idx]), Property(xy_holiday_mean),
-               TimeSeries(xy_lag_valid[:, valid_idx]), Property(xy_auto_corr)]
+               TimeSeries(xy_lags[:, valid_idx]), Property(xy_daily_auto_corr)]
 
 
 train_frame = Seq2SeqDataLoader(train_xy, batch_size=8, enc_lens=ENC_LEN, dec_lens=DEC_LEN, use_cuda=True,
-                                mode='train', time_free_space=time_free_space, enc_num_feats=trn_enc_num,
+                                mode='train', time_free_space=0, enc_num_feats=trn_enc_num,
                                 enc_cat_feats=trn_enc_cat, dec_num_feats=trn_dec_num,
                                 dec_cat_feats=trn_dec_cat,
                                 weights=trn_weight, seq_last=False)
@@ -157,16 +153,16 @@ valid_frame = Seq2SeqDataLoader(valid_xy, batch_size=64, enc_lens=ENC_LEN, dec_l
                                 seq_last=False)
 
 
-model = RNN2RNN(1, hidden_size=512, compress_size=128, enc_num_size=64,
-                enc_cat_size=[(62, 2)], dec_num_size=64, dec_cat_size=[(62, 2)], residual=True,
-                beta1=0., beta2=0., attn_heads=1, attn_size=128, num_layers=1, dropout=0.0, rnn_type='LSTM')
+model = RNN2RNN(96, hidden_size=512, compress_size=64, enc_num_size=40,
+                enc_cat_size=[(62, 2)], dec_num_size=40, dec_cat_size=[(62, 2)], residual=True,
+                beta1=0., beta2=0., attn_heads=1, attn_size=64, num_layers=1, dropout=0.0, rnn_type='GRU')
 opt = Adam(model.parameters(), 0.001)
 loss_fn = MSELoss()
 model.cuda()
 lr_scheduler = ReduceCosineAnnealingLR(opt, 64, eta_min=5e-5)
-learner = Learner(model, opt, './power_preds', verbose=20, lr_scheduler=None)
-learner.fit(500, train_frame, valid_frame, patient=128, start_save=1, early_stopping=True)
-learner.load(460)
+learner = Learner(model, opt, './power_preds', verbose=20, lr_scheduler=lr_scheduler)
+learner.fit(100, train_frame, valid_frame, patient=128, start_save=1, early_stopping=True)
+learner.load(86)
 learner.model.eval()
 
 preds = []
@@ -179,17 +175,17 @@ for batch in valid_frame:
 trues = torch.cat(trues, 2).squeeze().cpu().numpy() * xy_std + xy_mean
 preds = torch.cat(preds, 2).squeeze().detach().cpu().numpy() * xy_std + xy_mean
 
-k = 0
+k = 42
 
-plt.plot(trues[k])
-plt.plot(preds[k], label='preds')
+plt.plot(trues[k].reshape(-1))
+plt.plot(preds[k].reshape(-1), label='preds')
 plt.legend()
 
 
 test_xy = torch.as_tensor(xy[:, test_idx]).float().cuda()
 test_xy_num_feats = torch.as_tensor(
     np.concatenate([xy_date[:, test_idx], np.repeat(np.expand_dims(xy_holiday_mean, 1), len(test_idx), 1),
-                    xy_lag_valid[:, test_idx], np.repeat(np.expand_dims(xy_auto_corr, 1), len(test_idx), 1)],
+                    xy_lags[:, test_idx], np.repeat(np.expand_dims(xy_daily_auto_corr, 1), len(test_idx), 1)],
                    axis=2)).float().cuda()
 test_xy_cat_feats = torch.as_tensor(np.repeat(np.expand_dims(xy_cat, 1), test_xy.shape[1], 1)).long().cuda()
 
@@ -216,16 +212,15 @@ def wmape(y_hat, y):
 
 def metric(y_true, y_pred):
     scores = {}
-    for idx, name in enumerate(power.index):
+    for idx, name in enumerate(power_daily.index):
         scores[name] = wmape(y_pred[idx], y_true[idx])
     return pd.DataFrame(scores)
 
 
 def predict(learner, xy, x_num, x_cat, y_num, y_cat):
     preds = []
-    days = int(xy.shape[1] / 24 - ENC_LEN / 24 - DEC_LEN / 24 + 1)
-    for day in range(days):
-        step = day * 24
+    days = int(xy.shape[1] - ENC_LEN - DEC_LEN + 1)
+    for step in range(days):
         step_pred = learner.model(
             xy[:, step: step + ENC_LEN],
             enc_num=x_num[:, step: step + ENC_LEN],
@@ -234,19 +229,19 @@ def predict(learner, xy, x_num, x_cat, y_num, y_cat):
             dec_cat=y_cat[:, step + ENC_LEN: step + ENC_LEN + DEC_LEN],
             dec_len=DEC_LEN
         )[0].cpu().detach().numpy()
-        preds.append(step_pred[:, -24:])
+        preds.append(step_pred[:, [1]])
 
     preds = np.concatenate(preds, axis=1)
     preds = preds.squeeze() * xy_std + xy_mean
 
-    x_true = xy[:, :ENC_LEN + 24].cpu().numpy().squeeze() * xy_std + xy_mean
-    y_true = xy[:, ENC_LEN + 24:].cpu().numpy().squeeze() * xy_std + xy_mean
+    x_true = xy[:, :ENC_LEN + 1].cpu().numpy().squeeze() * xy_std + xy_mean
+    y_true = xy[:, ENC_LEN + 1:].cpu().numpy().squeeze() * xy_std + xy_mean
 
     return x_true, y_true, preds
 
 
 norm_data = pd.read_csv("./data/20200315_20200415.csv").drop(['Unnamed: 0', 'model_name'], axis=1)
-norm_data = norm_data[norm_data.contributor_id.isin(power.index)].reset_index(drop=True)
+norm_data = norm_data[norm_data.contributor_id.isin(power_daily.index)].reset_index(drop=True)
 norm_data = norm_data.set_index("contributor_id").loc[power.index].reset_index()
 norm_data['data_time'] = pd.to_datetime(norm_data.data_time)
 norm_data = norm_data.set_index("data_time").groupby("contributor_id").resample('1H')[['forecast_pwr', 'value']].sum().reset_index()
@@ -254,7 +249,8 @@ norm_true = norm_data.pivot(index='contributor_id', columns='data_time', values=
 norm_pred = norm_data.pivot(index='contributor_id', columns='data_time', values='forecast_pwr').iloc[:, 48:]
 
 
-x_true, y_true, y_pred  = predict(learner, test_xy, test_xy_num_feats, test_xy_cat_feats, test_xy_num_feats, test_xy_cat_feats)
+x_true, y_true, y_pred = predict(learner, test_xy, test_xy_num_feats, test_xy_cat_feats, test_xy_num_feats, test_xy_cat_feats)
+metric(y_true, y_pred).mean().rename("wave").describe()
 scores = pd.DataFrame([metric(y_true, y_pred).mean().rename("wave"),
                        metric(norm_true.values, norm_pred.values).mean().rename("v1")]).T.dropna()
 scores.describe()

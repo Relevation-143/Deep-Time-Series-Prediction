@@ -135,17 +135,14 @@ def mask_zero_nan(x, mask_zero=True, mask_nan=True):
     return mask
 
 
-def get_valid_start_end(data, mask=None):
+def get_valid_start_end(mask):
     """
-
     Args:
-        data (ndarray): shape N x S x D
         mask (ndarray of bool): invalid mask
     Returns:
-
     """
-    ns = data.shape[0]
-    nt = data.shape[1]
+    ns = mask.shape[0]
+    nt = mask.shape[1]
     start_idx = np.full(ns, -1, dtype=np.int32)
     end_idx = np.full(ns, -1, dtype=np.int32)
 
