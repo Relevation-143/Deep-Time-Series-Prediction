@@ -32,6 +32,9 @@ class RMSELoss:
 
 class RNNStabilityLoss:
     """
+
+    RNN outputs -> loss
+
     References:
         https://arxiv.org/pdf/1511.08400.pdf
     """
@@ -47,6 +50,10 @@ class RNNStabilityLoss:
 
 
 class RNNActivationLoss:
+
+    """
+    RNN outputs -> loss
+    """
 
     def __init__(self, beta=1e-5):
         self.beta = beta

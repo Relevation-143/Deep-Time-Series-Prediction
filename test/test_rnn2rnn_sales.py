@@ -4,6 +4,7 @@
 @contact: evilpsycho42@gmail.com
 @time   : 2020/5/13 15:17
 """
+from bentoml.artifact import PytorchModelArtifact
 import os
 import gc
 import warnings

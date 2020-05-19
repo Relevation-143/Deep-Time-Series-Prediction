@@ -2,3 +2,4 @@ torch==1.4
 tensorboard==2.2.0
 numpy
 matplotlib
+scipy

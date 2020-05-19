@@ -10,7 +10,7 @@ def make_lags(series, n_lags, use_smooth=False):
     """
 
     Args:
-        series (ndarray): shape N x S
+        series (ndarray): shape N x S ..., make sure time dimension in 2.
         n_lags (int or list):
         use_smooth (bool):  default False
 
@@ -165,4 +165,3 @@ def get_trend(x, max_T, use_smooth=True, smooth_windows=5, smooth_ration=0.5):
         x = smooth(x, smooth_windows, smooth_ration)
     lag = make_lags(x, max_T, use_smooth).squeeze()
     return np.where(lag == 0, 0, x / lag)
-

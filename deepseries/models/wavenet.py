@@ -10,6 +10,12 @@ from deepseries.nn.cnn import CausalConv1d
 from deepseries.nn.comm import Inputs
 
 
+class WaveNet(nn.Module):
+
+    def __init__(self):
+        super().__init__()
+
+
 class WaveEncoderV2(nn.Module):
 
     def __init__(self, series_dim, enc_num=None, enc_cat=None, residual_channels=32, n_blocks=3, n_layers=8, dropout=0.):

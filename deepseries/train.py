@@ -49,9 +49,10 @@ class Learner:
             datefmt='%m/%d/%Y %H:%M:%S'
         )
         # logging.getLogger().addHandler(logging.StreamHandler())
-        logger = logging.getLogger("deepseries.learner")
+        name = self.__class__.__name__
+        logger = logging.getLogger(name)
         if len(logger.handlers) < 1:
-            logging.getLogger("deepseries.learner").addHandler(logging.StreamHandler())
+            logging.getLogger(name).addHandler(logging.StreamHandler())
 
     def fit(self, max_epochs, train_dl, valid_dl, early_stopping=True, patient=10, start_save=-1):
         with SummaryWriter(self.log_dir) as writer:
