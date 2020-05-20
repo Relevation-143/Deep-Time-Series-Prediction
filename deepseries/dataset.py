@@ -5,16 +5,108 @@
 @time   : 2020/4/3 14:33
 """
 import torch
-from torch.utils.data import Dataset, DataLoader, BatchSampler, RandomSampler
+from torch.utils.data import Dataset, DataLoader, BatchSampler, RandomSampler, WeightedRandomSampler
 import copy
 import numpy as np
+from typing import List, Tuple
+
+
+class DataBlock:
+
+    def __init__(self, x, name, enc=True, dec=True, categorical=False, category_embed=None, mapping=None, seq_last=False):
+        assert len(x.shape) in [2, 3]
+        self.x = x
+        self.name = name
+        self.is_property = True if len(x.shape) == 2 else False
+        self.enc = enc
+        self.dec = dec
+        self.categorical = categorical
+        if self.categorical: assert isinstance(categorical, List) and isinstance(categorical[0], Tuple)
+        self.category_embed = category_embed
+        self.mapping = mapping
+        self.seq_last = seq_last
+        self.seq_dim = 2 if seq_last else 1
+
+    @property
+    def size(self):
+        if self.categorical:
+            return self.category_embed
+        else:
+            if self.is_property or self.seq_last:
+                return self.x.shape[1]
+            else:
+                return self.x.shape[2]
+
+    def read_batch(self):
+        pass
+
+    def split_by_time(self, *idxes):
+        assert isinstance(idxes, tuple)
+        if self.is_property:
+            return [self for idx in idxes]
+        else:
+            if self.seq_last:
+                return [DataBlock(self.x[:, :, idx], self.name, self.enc, self.dec, self.categorical,
+                                  self.category_embed, self.mapping, self.seq_last) for idx in idxes]
+            else:
+                return [DataBlock(self.x[:, idx], self.name, self.enc, self.dec, self.categorical,
+                                  self.category_embed, self.mapping, self.seq_last) for idx in idxes]
+
+
+class DataHouse:
+
+    def __init__(self, xy, data_blocks=None):
+        self.xy = xy
+        if data_blocks is not None:
+            assert isinstance(data_blocks, list)
+        self.data_blocks = data_blocks
+
+    @property
+    def enc_num_blocks(self):
+        if self.data_blocks is None: return None
+        blocks = [block for block in self.data_blocks if block.enc and not block.categorical]
+        if len(blocks) > 0:
+            return blocks
+        else:
+            return None
+
+    @property
+    def enc_cat_blocks(self):
+        if self.data_blocks is None: return None
+        blocks = [block for block in self.data_blocks if block.enc and block.categorical]
+        if len(blocks) > 0:
+            return blocks
+        else:
+            return None
+
+    @property
+    def dec_num_blocks(self):
+        if self.data_blocks is None: return None
+        blocks = [block for block in self.data_blocks if block.dec and not block.categorical]
+        if len(blocks) > 0:
+            return blocks
+        else:
+            return None
+
+    @property
+    def dec_cat_blocks(self):
+        if self.data_blocks is None: return None
+        blocks = [block for block in self.data_blocks if block.dec and block.categorical]
+        if len(blocks) > 0:
+            return blocks
+        else:
+            return None
+
+    @property
+    def enc_num_size(self):
+        if self.enc_num_blocks is not None:
+            return []
 
 
 class TimeSeries:
 
     def __init__(self, values, idx_map=None):
         """
-
         Args:
             values: shape(N, dim, seq)
             idx_map: dict

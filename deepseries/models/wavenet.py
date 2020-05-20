@@ -6,38 +6,19 @@
 """
 import torch
 import torch.nn as nn
-from deepseries.nn.cnn import CausalConv1d
-from deepseries.nn.comm import Inputs
+from deepseries.nn.cnn import WaveNetBlockV1
+from deepseries.nn.comm import Inputs, Concat
 
 
 class WaveNet(nn.Module):
 
-    def __init__(self):
+    def __init__(self, target_size, num_size=None, cat_size=None,
+                 residual_channels=32, num_blocks=8, num_layers=3, dropout=0.0):
         super().__init__()
-
-
-class WaveEncoderV2(nn.Module):
-
-    def __init__(self, series_dim, enc_num=None, enc_cat=None, residual_channels=32, n_blocks=3, n_layers=8, dropout=0.):
-        super().__init__()
-        self.enc_input = Inputs(enc_num, enc_cat, dropout=dropout, seq_last=True)
-        self.conv_input = nn.Conv1d(in_channels=self.enc_input.output_dim+series_dim,
-                                    out_channels=residual_channels, kernel_size=1)
-
-
-class WaveNetV2(nn.Module):
-    """
-            #            |----------------------------------------|     *residual*
-            #            |                                        |
-            #            |    |-- conv -- tanh --|                |
-            # -> dilate -|----|                  * ----|-- 1x1 -- + -->	*input*
-            #                 |-- conv -- sigm --|     |
-            #                                         1x1
-            #                                          |
-            # ---------------------------------------> + ------------->	*skip*
-    """
-
-    def __init__(self, series_dim, enc_num=None, enc_cat=None, dec_num=None, dec_cat=None, n_blocks=3, n_layers=8, dropout=0.):
-        super().__init__()
-        self.enc_input = Inputs(enc_num, enc_cat, dropout=dropout, seq_last=True)
-        self.dec_input = Inputs(dec_num, dec_cat, dropout=dropout, seq_last=True)
+        self.input = Inputs(num_size, cat_size, seq_last=True, dropout=dropout)
+        self.concat = Concat(dim=1)
+        self.conv_h = nn.Conv1d(self.input.output_size + target_size, residual_channels, kernel_size=1)
+        self.conv_c = nn.Conv1d(self.input.output_size + target_size, residual_channels, kernel_size=1)
+        self.wave_blocks = nn.ModuleList(
+            [WaveNetBlockV1(residual_channels, 2**block) for layer in range(num_layers) for block in range(num_blocks)]
+        )
