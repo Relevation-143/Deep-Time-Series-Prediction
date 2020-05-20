@@ -5,102 +5,223 @@
 @time   : 2020/4/3 14:33
 """
 import torch
-from torch.utils.data import Dataset, DataLoader, BatchSampler, RandomSampler, WeightedRandomSampler
+from torch.utils.data import Dataset, DataLoader, BatchSampler, RandomSampler, WeightedRandomSampler, Sampler
 import copy
 import numpy as np
 from typing import List, Tuple
+import numpy as np
+
+DEFAULT_DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 
-class DataBlock:
+class DeepSeriesDataSet(Dataset):
 
-    def __init__(self, x, name, enc=True, dec=True, categorical=False, category_embed=None, mapping=None, seq_last=False):
-        assert len(x.shape) in [2, 3]
-        self.x = x
+    def __init__(self, xy, enc_len, dec_len, weights=None, features=None, seq_last=True,
+                 device=DEFAULT_DEVICE, mode='train'):
+        self.xy = xy
+        self.enc_len = enc_len
+        self.dec_len = dec_len
+        self.weights = weights
+        self.features = features
+        self.series_size = xy.values.shape[0]
+        self.time_size = xy.values.shape[2]
+        self.num_samples_per_series = self.time_size - self.enc_len - self.dec_len + 1
+
+        self.enc_num = ValuesHouse(list(filter(lambda x: x.enc and not x.categorical, features)))
+        self.enc_cat = ValuesHouse(list(filter(lambda x: x.enc and x.categorical, features)))
+        self.dec_num = ValuesHouse(list(filter(lambda x: x.dec and not x.categorical, features)))
+        self.dec_cat = ValuesHouse(list(filter(lambda x: x.dec and x.categorical, features)))
+
+        self.seq_last = seq_last
+        self.device = device
+        self.mode = mode
+
+    def __len__(self):
+        return self.series_size * self.num_samples_per_series
+
+    def __getitem__(self, items):
+        series_idx = []
+        enc_idx = []
+        dec_idx = []
+        for item in items:
+            series_idx.append(item // self.num_samples_per_series)
+            start_idx = item % self.num_samples_per_series
+            mid_idx = start_idx + self.enc_len
+            end_idx = mid_idx + self.dec_len
+            enc_idx.append(np.arange(start_idx, mid_idx))
+            dec_idx.append(np.arange(mid_idx, end_idx))
+        series_idx = np.array(series_idx)
+        enc_idx = np.stack(enc_idx, axis=0)
+        dec_idx = np.stack(dec_idx, axis=0)
+
+    def check_to_tensor(self, x, dtype):
+        if x is None:
+            return x
+        x = torch.as_tensor(x)
+        if dtype == 'float32':
+            x = x.float()
+        elif dtype == 'int64':
+            x = x.long()
+        return x.to(self.device)
+
+    def read_batch(self, batch_series_idx, enc_time_idx, dec_time_idx):
+
+        dec_len = dec_time_idx.shape[1]
+        enc_x = self.xy.read_batch(batch_series_idx, enc_time_idx, self.seq_last)
+        feed_dict = {
+            "enc_x": self.check_to_tensor(enc_x, 'float32'),
+            "enc_num": self.check_to_tensor(
+                self.enc_num.read_batch(batch_series_idx, enc_time_idx, self.seq_last), 'float32'),
+            "enc_cat": self.check_to_tensor(
+                self.enc_cat.read_batch(batch_series_idx, enc_time_idx, self.seq_last), 'int64'),
+            "dec_x": self.check_to_tensor(
+                self.xy.read_batch(batch_series_idx, dec_time_idx-1, self.seq_last), 'float32'),
+            "dec_num": self.check_to_tensor(
+                self.dec_num.read_batch(batch_series_idx, dec_time_idx, self.seq_last), 'float32'),
+            "dec_cat": self.check_to_tensor(
+                self.dec_cat.read_batch(batch_series_idx, dec_time_idx, self.seq_last), 'int64'),
+            "dec_len": dec_len
+        }
+        if self.mode != "test":
+            dec_x = self.xy.read_batch(batch_series_idx, dec_time_idx, self.seq_last)
+            if self.weights is not None:
+                weights = self.weights.read_batch(batch_series_idx, dec_time_idx, self.seq_last)
+                return feed_dict, self.check_to_tensor(dec_x, 'float32'), self.check_to_tensor(weights, 'float32')
+            else:
+                return feed_dict, self.check_to_tensor(dec_x, 'float32').float(), None
+        else:
+            return feed_dict
+
+
+class ValuesHouse:
+
+    def __init__(self, values=None):
+        self.values = None if values is None or values == [] else values
+
+    def read_batch(self, series_idx, time_idx, seq_last):
+        if self.values is None:
+            return None
+        else:
+            if seq_last:
+                batch = np.concatenate([f.read_batch(series_idx, time_idx, seq_last) for f in self.values], axis=1)
+            else:
+                batch = np.concatenate([f.read_batch(series_idx, time_idx, seq_last) for f in self.values], axis=2)
+            return batch
+
+
+class Values:
+
+    """
+    default seq last
+    """
+
+    def __init__(self, values, name, enc=True, dec=True, categorical=False, category_embed=None, mapping=None):
+        assert len(values.shape) in [2, 3]
+        self.values = values
         self.name = name
-        self.is_property = True if len(x.shape) == 2 else False
+        self.is_property = True if len(values.shape) == 2 else False
         self.enc = enc
         self.dec = dec
         self.categorical = categorical
         if self.categorical: assert isinstance(categorical, List) and isinstance(categorical[0], Tuple)
         self.category_embed = category_embed
         self.mapping = mapping
-        self.seq_last = seq_last
-        self.seq_dim = 2 if seq_last else 1
 
     @property
     def size(self):
         if self.categorical:
             return self.category_embed
         else:
-            if self.is_property or self.seq_last:
-                return self.x.shape[1]
+            if self.is_property:
+                return self.values.shape[1]
             else:
-                return self.x.shape[2]
+                return self.values.shape[2]
 
-    def read_batch(self):
-        pass
+    def read_batch(self, series_idx, time_idx):
+        if self.mapping is not None:
+            series_idx = np.array([self.mapping.get(idx) for idx in series_idx])
+        if self.is_property:
+            batch = np.repeat(np.expand_dims(self.values[series_idx], axis=2), time_idx.shape[1], axis=2)
+        else:
+            batch_size = series_idx.shape[0] * time_idx.shape[0]
+            seq_len = time_idx.shape[1]
+            dim = self.values.shape[1]
+            batch = self.values[series_idx][:, :, time_idx].transpose(0, 2, 1, 3).reshape(batch_size, dim, seq_len)
+        return batch
 
     def split_by_time(self, *idxes):
         assert isinstance(idxes, tuple)
         if self.is_property:
             return [self for idx in idxes]
         else:
-            if self.seq_last:
-                return [DataBlock(self.x[:, :, idx], self.name, self.enc, self.dec, self.categorical,
-                                  self.category_embed, self.mapping, self.seq_last) for idx in idxes]
-            else:
-                return [DataBlock(self.x[:, idx], self.name, self.enc, self.dec, self.categorical,
-                                  self.category_embed, self.mapping, self.seq_last) for idx in idxes]
+            return [Values(self.values[:, :, idx], self.name, self.enc, self.dec, self.categorical,
+                           self.category_embed, self.mapping) for idx in idxes]
 
 
-class DataHouse:
+class DeepSeriesDataLoader:
 
-    def __init__(self, xy, data_blocks=None):
+    def __init__(self, xy, enc_len, dec_len, sample_rate, batch_size=32, weights=None, drop_last=False,
+                 device=DEFAULT_DEVICE, random_seed=42, features=None, val_starts=None, val_ends=None):
         self.xy = xy
-        if data_blocks is not None:
-            assert isinstance(data_blocks, list)
-        self.data_blocks = data_blocks
+        self.enc_len = enc_len
+        self.dec_len = dec_len
+        self.sample_rate = sample_rate
+        self.batch_size = batch_size
+        self.weights = weights
+        self.drop_last = drop_last
+        self.device = device
+        self.random_seed = np.random.RandomState(random_seed)
+        if features is not None:
+            assert isinstance(features, list)
+        self.features = features
+        self.val_starts = val_starts if val_starts is not None else np.zeros(self.xy.values.shape[2])
+        self.val_ends = val_ends if val_ends is not None else np.ones(self.xy.values.shape[2])*self.xy.values.shape[2]-1
+        assert np.all((self.val_ends - self.val_starts - enc_len - dec_len + 1) > 0)
+
+    def __len__(self):
+        ns = np.floor(np.sum(self.val_ends - self.val_starts - self.enc_len - self.dec_len + 1) * self.sample_rate)
+        nb = ns // self.batch_size + max(0, -int(self.drop_last))
+        return nb
+
+    def __iter__(self):
+        pass
 
     @property
-    def enc_num_blocks(self):
-        if self.data_blocks is None: return None
-        blocks = [block for block in self.data_blocks if block.enc and not block.categorical]
+    def enc_num(self):
+        if self.features is None: return None
+        blocks = [block for block in self.features if block.enc and not block.categorical]
         if len(blocks) > 0:
             return blocks
         else:
             return None
 
     @property
-    def enc_cat_blocks(self):
-        if self.data_blocks is None: return None
-        blocks = [block for block in self.data_blocks if block.enc and block.categorical]
+    def enc_cat(self):
+        if self.features is None: return None
+        blocks = [block for block in self.features if block.enc and block.categorical]
         if len(blocks) > 0:
             return blocks
         else:
             return None
 
     @property
-    def dec_num_blocks(self):
-        if self.data_blocks is None: return None
-        blocks = [block for block in self.data_blocks if block.dec and not block.categorical]
+    def dec_num(self):
+        if self.features is None: return None
+        blocks = [block for block in self.features if block.dec and not block.categorical]
         if len(blocks) > 0:
             return blocks
         else:
             return None
 
     @property
-    def dec_cat_blocks(self):
-        if self.data_blocks is None: return None
-        blocks = [block for block in self.data_blocks if block.dec and block.categorical]
+    def dec_cat(self):
+        if self.features is None: return None
+        blocks = [block for block in self.features if block.dec and block.categorical]
         if len(blocks) > 0:
             return blocks
         else:
             return None
 
-    @property
-    def enc_num_size(self):
-        if self.enc_num_blocks is not None:
-            return []
 
 
 class TimeSeries:
