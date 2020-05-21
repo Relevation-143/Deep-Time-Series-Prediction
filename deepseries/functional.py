@@ -165,3 +165,11 @@ def get_trend(x, max_T, use_smooth=True, smooth_windows=5, smooth_ration=0.5):
         x = smooth(x, smooth_windows, smooth_ration)
     lag = make_lags(x, max_T, use_smooth).squeeze()
     return np.where(lag == 0, 0, x / lag)
+
+
+def forward_split(time_idx, enc_len, valid_size):
+    if valid_size < 1:
+        valid_size = int(np.floor(len(time_idx) * valid_size))
+    valid_idx = time_idx[-(valid_size + enc_len):]
+    train_idx = time_idx[:-valid_size]
+    return train_idx, valid_idx

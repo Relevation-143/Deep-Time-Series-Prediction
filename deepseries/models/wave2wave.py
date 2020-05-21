@@ -25,7 +25,7 @@ class Wave2WaveEncoderV1(nn.Module):
                                           for l in range(num_layers) for b in range(num_blocks)])
 
     def forward(self, x, num=None, cat=None):
-        input = self.concat([x, num, self.embeds(cat)])
+        input = self.concat(x, num, self.embeds(cat))
         input = self.dropout(input)
         input = self.input_conv(input)
         skips = []
@@ -54,7 +54,7 @@ class Wave2WaveDecoderV1(nn.Module):
         self.loss_fn = loss_fn
 
     def forward(self, inputs_queue, x, num=None, cat=None):
-        input = self.concat([x, num, self.embeds(cat)])
+        input = self.concat(x, num, self.embeds(cat))
         input = self.dropout(input)
         input = self.input_conv(input)
         inputs_queue[0] = torch.cat([inputs_queue[0], input], dim=2)

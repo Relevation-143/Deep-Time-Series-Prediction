@@ -5,13 +5,16 @@
 @time   : 2020/5/20 17:17
 """
 import pytest
-from deepseries.dataset import DataBlock
+from deepseries.dataset import create_seq2seq_data_loader
 import numpy as np
 
 
-def test_data_block():
-    x1 = np.random.rand(4, 8, 12)
-    d1 = DataBlock(x1, 'x1', enc=True, dec=True, categorical=False, seq_last=True)
-    d11, d12 = d1.split_by_time([1, 2, 3], [2, 3, 4])
-    assert d11.size == 8
-    assert d11.x.shape == (4, 8, 3)
+def test_create_seq2seq_data_loader():
+    x = np.random.rand(30, 1, 24)
+    dl = create_seq2seq_data_loader(x, 12, 12, np.arange(x.shape[-1]), batch_size=4, num_iteration_per_epoch=30, seq_last=True)
+    for i, batch in enumerate(dl):
+        pass
+    assert i == 30-1
+
+
+

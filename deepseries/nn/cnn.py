@@ -56,15 +56,15 @@ class WaveNetBlockV1(nn.Module):
         self.skip_channels = skip_channels
         self.dilation = dilation
         self.dilation_conv = CausalConv1d(residual_channels, 2*residual_channels, dilation=dilation, kernel_size=2)
-        self.skip_conv = nn.Conv1d(residual_channels, residual_channels+skip_channels, kernel_size=2)
+        self.conv1x1 = nn.Conv1d(residual_channels, residual_channels+skip_channels, kernel_size=1)
 
-    def forward(self, input):
-        dilation = self.dilation_conv(input)
+    def forward(self, x):
+        dilation = self.dilation_conv(x)
         conv_filter, conv_gate = torch.split(dilation, self.residual_channels, dim=1)
         output = torch.tanh(conv_filter) * torch.sigmoid(conv_gate)
-        output = self.skip_conv(output)
+        output = self.conv1x1(output)
         skip, residual = torch.split(output, [self.skip_channels, self.residual_channels], dim=1)
-        next_input = input + residual
+        next_input = x + residual
         return next_input, skip
 
     def fast_forward(self, input):
@@ -77,7 +77,7 @@ class WaveNetBlockV1(nn.Module):
         dilation = torch.conv1d(input_short, self.dilation_conv.weight, self.dilation_conv.bias)
         conv_filter, conv_gate = torch.split(dilation, self.residual_channels, dim=1)
         output = torch.tanh(conv_filter) * torch.sigmoid(conv_gate)
-        output = self.skip_conv(output)
+        output = self.conv1x1(output)
         skip, residual = torch.split(output, [self.skip_channels, self.residual_channels], dim=1)
         next_input = input + residual
         return next_input, skip
