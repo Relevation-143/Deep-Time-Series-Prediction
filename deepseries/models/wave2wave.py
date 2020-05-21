@@ -64,6 +64,8 @@ class Wave2WaveDecoderV1(nn.Module):
             skips.append(skip)
             if i == len(self.wave_blocks)-1:
                 break
+            print(type(inputs_queue[i+1]
+                       ), type(input))
             inputs_queue[i+1] = torch.cat([inputs_queue[i+1], input], dim=2)
         skips = torch.relu(torch.cat(skips, dim=1))
         skips = torch.relu(self.output_conv1(skips))
