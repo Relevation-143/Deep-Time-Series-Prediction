@@ -59,8 +59,8 @@ class WaveNetBlockV1(nn.Module):
         self.conv1x1 = nn.Conv1d(residual_channels, residual_channels+skip_channels, kernel_size=1)
 
     def forward(self, x):
-        dilation = self.dilation_conv(x)
-        conv_filter, conv_gate = torch.split(dilation, self.residual_channels, dim=1)
+        conv_dilation = self.dilation_conv(x)
+        conv_filter, conv_gate = torch.split(conv_dilation, self.residual_channels, dim=1)
         output = torch.tanh(conv_filter) * torch.sigmoid(conv_gate)
         output = self.conv1x1(output)
         skip, residual = torch.split(output, [self.skip_channels, self.residual_channels], dim=1)
@@ -74,6 +74,7 @@ class WaveNetBlockV1(nn.Module):
         else:
             last = input[:, :, [-1]]
             input_short = torch.cat([torch.zeros_like(last), last], dim=2)
+        print(input_short.shape)
         dilation = torch.conv1d(input_short, self.dilation_conv.weight, self.dilation_conv.bias)
         conv_filter, conv_gate = torch.split(dilation, self.residual_channels, dim=1)
         output = torch.tanh(conv_filter) * torch.sigmoid(conv_gate)

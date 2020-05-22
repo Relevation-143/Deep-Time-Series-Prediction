@@ -155,6 +155,9 @@ class DeepSeriesSampler(Sampler):
         return iter([self.seed.choice(samples, self.batch_size, replace=False)
                      for i in range(self.num_iteration_per_epoch)])
 
+    def __len__(self):
+        return self.num_iteration_per_epoch
+
 
 def forward_split(time_idx, enc_len, valid_size):
     if valid_size < 1:

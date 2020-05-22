@@ -33,7 +33,7 @@ class Wave2WaveEncoderV1(nn.Module):
         for block in self.wave_blocks[:-1]:
             input, skip = block(input)
             skips.append(skip)
-            inputs.append(inputs)
+            inputs.append(input)
         return inputs, skips
 
 
@@ -49,34 +49,32 @@ class Wave2WaveDecoderV1(nn.Module):
         self.input_conv = nn.Conv1d(input_channels, residual_channels, kernel_size=1)
         self.wave_blocks = nn.ModuleList([WaveNetBlockV1(residual_channels, skip_channels, 2 ** b)
                                           for l in range(num_layers) for b in range(num_blocks)])
-        self.output_conv1 = nn.Conv1d(num_layers*num_blocks*skip_channels, output_size, kernel_size=1)
+        self.output_conv1 = nn.Conv1d(skip_channels, output_size, kernel_size=1)
         self.output_conv2 = nn.Conv1d(output_size, target_size, kernel_size=1)
         self.loss_fn = loss_fn
 
-    def forward(self, inputs_queue, x, num=None, cat=None):
+    def forward(self, queue, x, num=None, cat=None):
         input = self.concat(x, num, self.embeds(cat))
         input = self.dropout(input)
         input = self.input_conv(input)
-        inputs_queue[0] = torch.cat([inputs_queue[0], input], dim=2)
-        skips = []
+        update_queue = [torch.cat([queue[0], input], dim=2)]
+        skips = .0
         for i, block in enumerate(self.wave_blocks):
-            input, skip = block.fast_forward(inputs_queue[i])
-            skips.append(skip)
+            input, skip = block.fast_forward(update_queue[i])
+            skips += skip
             if i == len(self.wave_blocks)-1:
                 break
-            print(type(inputs_queue[i+1]
-                       ), type(input))
-            inputs_queue[i+1] = torch.cat([inputs_queue[i+1], input], dim=2)
-        skips = torch.relu(torch.cat(skips, dim=1))
+            update_queue.append(torch.cat([queue[i+1], input], dim=2))
+        skips = torch.relu(skips)
         skips = torch.relu(self.output_conv1(skips))
         output = self.output_conv2(skips)
-        return output, inputs_queue
+        return output, update_queue
 
 
 class Wave2WaveV1(nn.Module):
 
     def __init__(self, target_size, enc_cat_size=None, enc_num_size=None, dec_cat_size=None, dec_num_size=None,
-                 residual_channels=32, share_embeds=None, skip_channels=32, num_blocks=8, num_layers=3,
+                 residual_channels=32, share_embeds=False, skip_channels=32, num_blocks=8, num_layers=3,
                  dropout=.0, output_size=128):
         super().__init__()
         self.encoder = Wave2WaveEncoderV1(target_size, enc_cat_size, enc_num_size, residual_channels, skip_channels,
@@ -91,7 +89,10 @@ class Wave2WaveV1(nn.Module):
         inputs, _ = self.encoder(x['enc_x'], x['enc_num'], x['enc_cat'])
         y_hats = []
         for step in range(x['dec_len']):
-            y_hat, inputs = self.decoder(inputs, x['dec_x'], x['dec_num'], x['dec_cat'])
+            y_hat, inputs = self.decoder(inputs,
+                                         x['dec_x'][:, :, [step]],
+                                         x['dec_num'][:, :, [step]] if x['dec_num'] is not None else None,
+                                         x['dec_cat'][:, :, [step]] if x['dec_cat'] is not None else None)
             y_hats.append(y_hat)
         y_hats = torch.cat(y_hats, dim=2)
         loss = self.loss_fn(y_hats, y, w)
