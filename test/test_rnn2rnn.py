@@ -20,7 +20,7 @@ from deepseries.optim import ReduceCosineAnnealingLR
 
 
 DIR = "./data"
-N_ROWS = 10000
+N_ROWS = 100
 DROP_BEFORE = 1000
 BATCH_SIZE = 32
 LAGS = [365, 182, 90, 28]
