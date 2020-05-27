@@ -10,7 +10,7 @@ import numpy as np
 import scipy as sp
 import gc
 from sklearn.preprocessing import LabelEncoder
-from deepseries.models import Wave2WaveV1
+from deepseries.models import Wave2Wave
 from deepseries.train import Learner
 from deepseries.dataset import Values, create_seq2seq_data_loader, forward_split
 import deepseries.functional as F
@@ -20,9 +20,9 @@ from deepseries.optim import ReduceCosineAnnealingLR
 
 
 DIR = "./data"
-N_ROWS = 100
+N_ROWS = 10000
 DROP_BEFORE = 1000
-BATCH_SIZE = 32
+BATCH_SIZE = 128
 LAGS = [365, 182, 90, 28]
 MAX_LAGS = max(LAGS)
 
@@ -140,23 +140,23 @@ time_idxes = np.arange(series.shape[2])
 trn_idx, val_idx = forward_split(time_idxes, ENC_LEN, VALID_LEN+TEST_LEN)
 val_idx, test_idx = forward_split(val_idx, ENC_LEN, TEST_LEN)
 trn_dl = create_seq2seq_data_loader(series, enc_len=ENC_LEN, dec_len=DEC_LEN, time_idx=trn_idx,
-                                    batch_size=BATCH_SIZE, num_iteration_per_epoch=1,
+                                    batch_size=BATCH_SIZE, num_iteration_per_epoch=100,
                                     features=[series_lags, series_lags_corr],
                                     seq_last=True, device='cuda', mode='train')
 
 val_dl = create_seq2seq_data_loader(series, enc_len=ENC_LEN, dec_len=DEC_LEN, time_idx=val_idx,
-                                    batch_size=BATCH_SIZE, num_iteration_per_epoch=4,
+                                    batch_size=BATCH_SIZE, num_iteration_per_epoch=100,
                                     features=[series_lags, series_lags_corr],
                                     seq_last=True, device='cuda', mode='valid')
 
 
-model = Wave2WaveV1(1, enc_num_size=8, dec_num_size=8, residual_channels=8, skip_channels=8, num_layers=1)
+model = Wave2Wave(1, enc_num_size=8, dec_num_size=8, residual_channels=32, skip_channels=32, num_blocks=2, num_layers=6)
 opt = Adam(model.parameters(), 0.001)
 loss_fn = RMSELoss()
 lr_scheduler = ReduceCosineAnnealingLR(opt, 64, eta_min=1e-4, gamma=0.998)
 model.cuda()
-learner = Learner(model, opt, './m5_rnn', lr_scheduler=lr_scheduler, verbose=1)
-learner.fit(50, trn_dl, val_dl, patient=64, start_save=-1, early_stopping=True)
+learner = Learner(model, opt, './m5_rnn', lr_scheduler=lr_scheduler, verbose=10)
+learner.fit(5, trn_dl, val_dl, patient=64, start_save=-1, early_stopping=True)
 
 import torch
 torch.cuda.memory_allocated() / 1024**2

@@ -174,7 +174,7 @@ def create_seq2seq_data_loader(series, enc_len, dec_len, time_idx, batch_size, n
     features = None if features is None else [f.sub(time_idx) for f in features]
     data_set = DeepSeriesDataSet(series, enc_len, dec_len, weights, features, seq_last, device, mode)
     sampler = DeepSeriesSampler(data_set, batch_size, num_iteration_per_epoch, seed)
-    data_loader = DataLoader(data_set, sampler=sampler, collate_fn=seq2seq_collate_fn)
+    data_loader = DataLoader(data_set, sampler=sampler, collate_fn=seq2seq_collate_fn, num_workers=8)
     logger.info("---------- dataset information ----------")
     logger.info(json2str(data_loader.dataset.info))
     proportion = batch_size * num_iteration_per_epoch / len(data_set)

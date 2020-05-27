@@ -39,9 +39,9 @@ class Embeddings(nn.Module):
         self.embeds_size = embeds_size
         self.embeddings = nn.ModuleList([nn.Embedding(i, o) for i, o in embeds_size]) if embeds_size else None
         self.seq_last = seq_last
-        self.output_size = sum([i for _, i in embeds_size]) if embeds_size else 0
+        self.output_size = sum([i for _, i in embeds_size]) if embeds_size is not None else 0
 
-    def forward(self, inputs):
+    def forward(self, inputs=None):
         if inputs is None:
             return None
         if self.seq_last:
