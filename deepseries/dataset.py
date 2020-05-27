@@ -168,13 +168,14 @@ def forward_split(time_idx, enc_len, valid_size):
 
 
 def create_seq2seq_data_loader(series, enc_len, dec_len, time_idx, batch_size, num_iteration_per_epoch, weights=None,
-                               features=None, seq_last=False, device=DEFAULT_DEVICE, mode='train', seed=42):
+                               features=None, seq_last=False, device=DEFAULT_DEVICE, mode='train', seed=42, num_workers=0,
+                               pin_memory=False):
     series = Values(series, 'series').sub(time_idx)
     weights = None if weights is None else Values(weights, 'weights').sub(time_idx)
     features = None if features is None else [f.sub(time_idx) for f in features]
     data_set = DeepSeriesDataSet(series, enc_len, dec_len, weights, features, seq_last, device, mode)
     sampler = DeepSeriesSampler(data_set, batch_size, num_iteration_per_epoch, seed)
-    data_loader = DataLoader(data_set, sampler=sampler, collate_fn=seq2seq_collate_fn, num_workers=8)
+    data_loader = DataLoader(data_set, sampler=sampler, collate_fn=seq2seq_collate_fn, num_workers=num_workers, pin_memory=pin_memory)
     logger.info("---------- dataset information ----------")
     logger.info(json2str(data_loader.dataset.info))
     proportion = batch_size * num_iteration_per_epoch / len(data_set)

@@ -15,7 +15,6 @@ from deepseries.train import Learner
 from deepseries.dataset import Values, create_seq2seq_data_loader, forward_split
 import numpy as np
 from torch.optim import Adam
-import torch
 
 
 batch_size = 16
@@ -29,7 +28,7 @@ train_dl = create_seq2seq_data_loader(series, enc_len=14, dec_len=7, time_idx=tr
                                       batch_size=12, num_iteration_per_epoch=12, seq_last=True)
 valid_dl = create_seq2seq_data_loader(series, enc_len=14, dec_len=7, time_idx=valid_idx,
                                       batch_size=12, num_iteration_per_epoch=12, seq_last=True)
-model = Wave2Wave(1, debug=False, num_layers=8, num_blocks=1)
+model = Wave2Wave(1, debug=False, num_layers=5, num_blocks=1)
 model.cuda()
 opt = Adam(model.parameters(), 0.001)
 learner = Learner(model, opt, ".")

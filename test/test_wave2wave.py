@@ -142,7 +142,13 @@ val_idx, test_idx = forward_split(val_idx, ENC_LEN, TEST_LEN)
 trn_dl = create_seq2seq_data_loader(series, enc_len=ENC_LEN, dec_len=DEC_LEN, time_idx=trn_idx,
                                     batch_size=BATCH_SIZE, num_iteration_per_epoch=100,
                                     features=[series_lags, series_lags_corr],
-                                    seq_last=True, device='cuda', mode='train')
+                                    seq_last=True, device='cuda', mode='train', num_workers=0, pin_memory=False)
+import time
+
+start = time.time()
+for batch in trn_dl:
+    pass
+print(f"cost time {(time.time() - start) / 60:.2f} mins per epoch")
 
 val_dl = create_seq2seq_data_loader(series, enc_len=ENC_LEN, dec_len=DEC_LEN, time_idx=val_idx,
                                     batch_size=BATCH_SIZE, num_iteration_per_epoch=100,
@@ -157,6 +163,3 @@ lr_scheduler = ReduceCosineAnnealingLR(opt, 64, eta_min=1e-4, gamma=0.998)
 model.cuda()
 learner = Learner(model, opt, './m5_rnn', lr_scheduler=lr_scheduler, verbose=10)
 learner.fit(5, trn_dl, val_dl, patient=64, start_save=-1, early_stopping=True)
-
-import torch
-torch.cuda.memory_allocated() / 1024**2
