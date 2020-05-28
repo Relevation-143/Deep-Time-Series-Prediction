@@ -11,7 +11,7 @@ from deepseries.nn.comm import Embeddings, Concat
 from deepseries.nn.loss import RMSELoss
 from deepseries.log import get_logger
 
-logger = get_logger("Wave2Wave")
+logger = get_logger(__name__)
 
 
 class Wave2Wave(nn.Module):
@@ -41,16 +41,12 @@ class Wave2Wave(nn.Module):
         self.loss_fn = loss_fn
 
     def encode(self, x, num=None, cat=None):
-        if self.debug:
-            logger.info("start encode")
         x = self.concat(x, num, self.enc_embeds(cat))
         x = self.dropout(x)
         _, state = self.encoder.encode(x)
         return state
 
     def decode(self, x, state, num=None, cat=None):
-        if self.debug:
-            logger.info("decode step")
         x = self.concat(x, num, self.enc_embeds(cat))
         x = self.dropout(x)
         skips, state = self.decoder.decode(x, state)
@@ -68,6 +64,9 @@ class Wave2Wave(nn.Module):
                                       x['dec_cat'][:, :, [step]] if x['dec_cat'] is not None else None)
             preds.append(pred)
         preds = torch.cat(preds, dim=2)
+        if self.debug:
+            message = f"batch loss predict mean: {preds.mean()}, target mean: {y.mean()}"
+            logger.info(message)
         loss = self.loss_fn(preds, y, w)
         del state
         return loss

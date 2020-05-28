@@ -143,12 +143,11 @@ trn_dl = create_seq2seq_data_loader(series, enc_len=ENC_LEN, dec_len=DEC_LEN, ti
                                     batch_size=BATCH_SIZE, num_iteration_per_epoch=100,
                                     features=[series_lags, series_lags_corr],
                                     seq_last=True, device='cuda', mode='train', num_workers=0, pin_memory=False)
-import time
-
-start = time.time()
-for batch in trn_dl:
-    pass
-print(f"cost time {(time.time() - start) / 60:.2f} mins per epoch")
+# import time
+# start = time.time()
+# for batch in trn_dl:
+#     pass
+# print(f"cost time {(time.time() - start) / 60:.2f} mins per epoch")
 
 val_dl = create_seq2seq_data_loader(series, enc_len=ENC_LEN, dec_len=DEC_LEN, time_idx=val_idx,
                                     batch_size=BATCH_SIZE, num_iteration_per_epoch=100,
@@ -156,7 +155,8 @@ val_dl = create_seq2seq_data_loader(series, enc_len=ENC_LEN, dec_len=DEC_LEN, ti
                                     seq_last=True, device='cuda', mode='valid')
 
 
-model = Wave2Wave(1, enc_num_size=8, dec_num_size=8, residual_channels=32, skip_channels=32, num_blocks=2, num_layers=6)
+model = Wave2Wave(1, enc_num_size=8, dec_num_size=8, residual_channels=32, skip_channels=32,
+                  num_blocks=2, num_layers=6, debug=True)
 opt = Adam(model.parameters(), 0.001)
 loss_fn = RMSELoss()
 lr_scheduler = ReduceCosineAnnealingLR(opt, 64, eta_min=1e-4, gamma=0.998)

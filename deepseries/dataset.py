@@ -143,20 +143,20 @@ def seq2seq_collate_fn(batch):
 
 class DeepSeriesSampler(Sampler):
 
-    def __init__(self, data_source, batch_size, num_iteration_per_epoch, seed=42):
+    def __init__(self, data_source, batch_size, num_iterations, seed=42):
         super().__init__(data_source)
         self.data_source = data_source
         self.batch_size = batch_size
-        self.num_iteration_per_epoch = num_iteration_per_epoch
+        self.num_iterations = num_iterations
         self.seed = np.random.RandomState(seed)
 
     def __iter__(self):
         samples = np.arange(len(self.data_source))
         return iter([self.seed.choice(samples, self.batch_size, replace=False)
-                     for i in range(self.num_iteration_per_epoch)])
+                     for i in range(self.num_iterations)])
 
     def __len__(self):
-        return self.num_iteration_per_epoch
+        return self.num_iterations
 
 
 def forward_split(time_idx, enc_len, valid_size):
@@ -167,18 +167,19 @@ def forward_split(time_idx, enc_len, valid_size):
     return train_idx, valid_idx
 
 
-def create_seq2seq_data_loader(series, enc_len, dec_len, time_idx, batch_size, num_iteration_per_epoch, weights=None,
+def create_seq2seq_data_loader(series, enc_len, dec_len, time_idx, batch_size, num_iterations, weights=None,
                                features=None, seq_last=False, device=DEFAULT_DEVICE, mode='train', seed=42, num_workers=0,
                                pin_memory=False):
     series = Values(series, 'series').sub(time_idx)
     weights = None if weights is None else Values(weights, 'weights').sub(time_idx)
     features = None if features is None else [f.sub(time_idx) for f in features]
     data_set = DeepSeriesDataSet(series, enc_len, dec_len, weights, features, seq_last, device, mode)
-    sampler = DeepSeriesSampler(data_set, batch_size, num_iteration_per_epoch, seed)
-    data_loader = DataLoader(data_set, sampler=sampler, collate_fn=seq2seq_collate_fn, num_workers=num_workers, pin_memory=pin_memory)
-    logger.info("---------- dataset information ----------")
+    sampler = DeepSeriesSampler(data_set, batch_size, num_iterations, seed)
+    data_loader = DataLoader(data_set, sampler=sampler, collate_fn=seq2seq_collate_fn,
+                             num_workers=num_workers, pin_memory=pin_memory)
+    logger.info(f"---------- {mode} dataset information ----------")
     logger.info(json2str(data_loader.dataset.info))
-    proportion = batch_size * num_iteration_per_epoch / len(data_set)
+    proportion = batch_size * num_iterations / len(data_set)
     logger.info(f"data loader sampling proportion of each epoch: {proportion*100:.1f}%")
     return data_loader
 

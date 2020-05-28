@@ -26,7 +26,6 @@ series = series.reshape(1, 1, -1)
 train_idx, valid_idx = forward_split(np.arange(series.shape[2]), enc_len=14, valid_size=200)
 
 
-
 train_dl = create_seq2seq_data_loader(series, enc_len=14, dec_len=7, time_idx=train_idx,
                                       batch_size=12, num_iteration_per_epoch=12, seq_last=False)
 valid_dl = create_seq2seq_data_loader(series, enc_len=14, dec_len=7, time_idx=valid_idx,
